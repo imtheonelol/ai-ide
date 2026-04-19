@@ -14,7 +14,6 @@ import { FileEntry } from "./domain/types";
 import { readProjectFiles, createProjectFolder } from "./infrastructure/fileSystem";
 import "./App.css";
 
-// --- FIXED: Native ContextMenu propagation ---
 const FileTreeNode = ({ file, ide, paddingLeft, onContextMenu }: { file: FileEntry, ide: any, paddingLeft: number, onContextMenu: (e: React.MouseEvent, f: FileEntry) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [children, setChildren] = useState<FileEntry[]>([]);
@@ -136,7 +135,6 @@ function App() {
     <div className={`ide-wrapper theme-${ide.settings.theme}`} onClick={() => setContextMenu(null)}>
       <div className="toast-container">{ide.toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.message}</div>)}</div>
 
-      {/* --- FIXED: Context Menu Race Condition --- */}
       {contextMenu && (
         <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
           <div onClick={() => { ide.handleDelete(contextMenu.file); setContextMenu(null); }}>🗑️ Delete {contextMenu.file.name}</div>
@@ -172,7 +170,7 @@ function App() {
             <div className="dropdown"><div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div><div onClick={() => ide.setShowTaskModal(true)}>Background Task Scheduler</div></div>
           </div>
           <div className="menu-item has-dropdown">Help
-            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v5.0 - Uncompromising Architecture.")}>About</div></div>
+            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v6.0 - Ultimate Edition.")}>About</div></div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -180,7 +178,6 @@ function App() {
 
       <div className="ide-container">
         
-        {/* LICENSE MODAL */}
         {ide.showLicenseModal && (
           <div className="modal-overlay" onClick={() => ide.setShowLicenseModal(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -201,7 +198,6 @@ function App() {
           </div>
         )}
 
-        {/* TASK SCHEDULER MODAL */}
         {ide.showTaskModal && (
           <div className="modal-overlay" onClick={() => ide.setShowTaskModal(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -231,7 +227,6 @@ function App() {
           </div>
         )}
 
-        {/* Settings Modal */}
         {ide.showSettings && (
           <div className="modal-overlay" onClick={() => ide.setShowSettings(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -246,11 +241,12 @@ function App() {
                 <input type="password" placeholder="Gemini Key" value={ide.settings.geminiKey} onChange={e => ide.setSettings({...ide.settings, geminiKey: e.target.value})} />
               </div>
               <div className="settings-section">
+                {/* UPGRADED: Expert Coder Models */}
                 <h3>1-Click Local Models</h3>
                 <div style={{display: 'flex', gap: '5px', flexWrap: 'wrap'}}>
-                  <button className="text-btn outline" onClick={() => installModel('deepseek-coder:6.7b')}>DeepSeek 6.7b</button>
-                  <button className="text-btn outline" onClick={() => installModel('llama3')}>Llama 3</button>
-                  <button className="text-btn outline" onClick={() => installModel('mistral')}>Mistral</button>
+                  <button className="text-btn outline" onClick={() => installModel('deepseek-coder-v2')}>DeepSeek Coder v2</button>
+                  <button className="text-btn outline" onClick={() => installModel('qwen2.5-coder:7b')}>Qwen2.5 Coder 7B</button>
+                  <button className="text-btn outline" onClick={() => installModel('codestral')}>Codestral</button>
                 </div>
               </div>
               <button className="close-btn" onClick={() => ide.setShowSettings(false)}>Close</button>

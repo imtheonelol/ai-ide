@@ -28,7 +28,7 @@ export const useIdeLogic = () => {
   const [selectedModel, setSelectedModel] = useState<AIModel>(CLOUD_MODELS[0]);
   const [chatInput, setChatInput] = useState("");
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous Agent Online." }]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous Agent Online. Modern UI Rules Active." }]);
 
   const addToast = (msg: string, type: "info" | "success" | "error" = "info") => {
     const id = Date.now(); setToasts(prev => [...prev, { id, message: msg, type }]);
@@ -49,7 +49,6 @@ export const useIdeLogic = () => {
   const handleOpenFolder = async () => { const newPath = await openNativeFolderPicker(); if (newPath) { setCurrentDir(newPath); setActiveFile(null); setCode(""); addToast("Workspace loaded", "success"); } };
   const handleFileClick = async (file: FileEntry) => { if (!file.is_dir) { const content = await readFileContent(file.path); setActiveFile(file); setCode(content); setActiveTab("editor"); } };
   
-  // --- FIXED: Robust error handling for deletions ---
   const handleDelete = async (file: FileEntry) => { 
     if (confirm(`Are you sure you want to permanently delete ${file.name}?`)) { 
       try {
@@ -97,8 +96,16 @@ export const useIdeLogic = () => {
     try {
       const workspaceContext = await getWorkspaceContext();
       const apiKey = selectedModel.provider === "openai" ? settings.openAiKey : settings.geminiKey;
-      const systemPrompt = `You are a God-Tier Autonomous IDE Agent. You control the user's workspace.
+      
+      // --- UPGRADED: God-Tier UI/UX Design System Prompt ---
+      const systemPrompt = `You are a God-Tier Autonomous IDE Agent and Expert UI/UX Developer. You control the user's workspace.
       DO NOT use markdown format (***) in your text responses.
+      
+      CRITICAL DESIGN RULES:
+      - Always write modern, production-ready, and gorgeous code. 
+      - For HTML/CSS: Use mobile-first responsive design, modern Flexbox or CSS Grid, CSS variables, glassmorphism, soft box-shadows, modern fonts (sans-serif like Inter or Roboto), smooth hover transitions, and excellent padding/spacing. 
+      - NEVER write ugly, outdated, or basic tutorial-level designs. Make it look like a premium tech startup.
+      
       To WRITE files, use exactly: <file action="write" path="filename.ext">content</file>
       To DELETE files: <file action="delete" path="filename.ext"></file>
       To RUN TERMINAL COMMANDS: <cmd>npm install axios</cmd>`;
