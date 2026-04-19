@@ -39,23 +39,34 @@ function App() {
   useEffect(() => { const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 50); }, [ide.chatHistory, ide.isAiThinking]);
 
-  // FIXED: Safely check if a file is active before reading its extension
   const editorExtensions = useMemo(() => {
     const exts = [search({ top: true })]; 
-    const fileName = ide.activeFile?.name || "";
-    
-    if (fileName.endsWith(".html")) exts.push(html());
-    else if (fileName.endsWith(".css")) exts.push(css());
+    if (ide.activeFile?.name.endsWith(".html")) exts.push(html());
+    else if (ide.activeFile?.name.endsWith(".css")) exts.push(css());
     else exts.push(javascript({ jsx: true, typescript: true }));
-    
     return exts;
   }, [ide.activeFile?.name]);
 
   const installModel = async (m: string) => {
     ide.setTerminalOutput(prev => prev + `\n> Downloading ${m} in background...\n`);
-    try { await pullNewModel(m); ide.setTerminalOutput(prev => prev + `✅ ${m} installed! Restart IDE.\n`); } 
+    try { await pullNewModel(m); ide.setTerminalOutput(prev => prev + `✅ ${m} installed! Restart IDE to see it.\n`); } 
     catch(e) { ide.setTerminalOutput(prev => prev + `❌ Failed to install ${m}.\n`); }
   };
+
+  // --- THE NEW BOOT SCREEN ---
+  if (ide.isBooting) {
+    return (
+      <div className="boot-screen">
+        <div className="boot-logo-container">
+          <div className="boot-spinner"></div>
+          <img src="/tauri.svg" alt="Logo" className="boot-logo-image" />
+        </div>
+        <h1 className="boot-title">Godly IDE</h1>
+        <p className="boot-status">{ide.bootStatus}</p>
+        <div className="boot-bar"><div className="boot-fill"></div></div>
+      </div>
+    );
+  }
 
   return (
     <div className={`ide-wrapper theme-${ide.settings.theme}`}>
@@ -70,23 +81,10 @@ function App() {
             <div className="dropdown"><div onClick={() => ide.handleNewFile(ide.currentDir)}>New File</div><div onClick={ide.handleOpenFolder}>Open Folder...</div><div onClick={ide.handleSaveFile}>Save (Ctrl+S)</div></div>
           </div>
           <div className="menu-item has-dropdown">Git
-            <div className="dropdown">
-              <div onClick={() => ide.handleGitCommand("status")}>Status</div>
-              <div onClick={() => ide.handleGitCommand("add")}>Add All</div>
-              <div onClick={() => ide.handleGitCommand("commit")}>Commit...</div>
-              <div onClick={() => ide.handleGitCommand("pull")}>Pull</div>
-              <div onClick={() => ide.handleGitCommand("push")}>Push</div>
-            </div>
+            <div className="dropdown"><div onClick={() => ide.handleGitCommand("status")}>Status</div><div onClick={() => ide.handleGitCommand("add")}>Add All</div><div onClick={() => ide.handleGitCommand("commit")}>Commit...</div><div onClick={() => ide.handleGitCommand("pull")}>Pull</div><div onClick={() => ide.handleGitCommand("push")}>Push</div></div>
           </div>
           <div className="menu-item has-dropdown">Run
-            <div className="dropdown">
-              <div onClick={ide.runCode}>Execute Active File {ide.settings.useWsl ? "(WSL)" : ""}</div>
-            </div>
-          </div>
-          <div className="menu-item has-dropdown">Terminal
-            <div className="dropdown">
-              <div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div>
-            </div>
+            <div className="dropdown"><div onClick={ide.runCode}>Run Active File</div><div onClick={ide.startLiveServer}>Go Live (Localhost)</div></div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -109,10 +107,9 @@ function App() {
               <div className="settings-section">
                 <h3>1-Click Local Models</h3>
                 <div style={{display: 'flex', gap: '5px', flexWrap: 'wrap'}}>
-                  <button className="text-btn" onClick={() => installModel('llama3')}>Llama 3</button>
-                  <button className="text-btn" onClick={() => installModel('mistral')}>Mistral</button>
-                  <button className="text-btn" onClick={() => installModel('phi3')}>Phi-3</button>
-                  <button className="text-btn" onClick={() => installModel('qwen2.5:7b')}>Qwen 7B</button>
+                  <button className="text-btn outline" onClick={() => installModel('llama3')}>Llama 3</button>
+                  <button className="text-btn outline" onClick={() => installModel('mistral')}>Mistral</button>
+                  <button className="text-btn outline" onClick={() => installModel('deepseek-coder:6.7b')}>DeepSeek</button>
                 </div>
               </div>
               <button className="close-btn" onClick={() => ide.setShowSettings(false)}>Close</button>
@@ -137,8 +134,8 @@ function App() {
 
         <main className="main-content">
           <header className="editor-header">
-            <div className="tabs"><div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>{ide.activeFile?.name || "Code"}</div><div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Iframe Preview</div></div>
-            <div className="editor-actions"><button className="text-btn outline" onClick={ide.runCode}>▶ Run Code</button></div>
+            <div className="tabs"><div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>{ide.activeFile?.name || "Code"}</div><div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Browser Preview</div></div>
+            <div className="editor-actions"><button className="text-btn outline" onClick={ide.runCode}>▶ Run</button></div>
           </header>
 
           <div className="editor-workspace">
@@ -148,8 +145,8 @@ function App() {
         </main>
 
         <aside className="ai-panel">
-          <div className="panel-header"><span>AI Chat</span>
-            <select className="model-selector" value={ide.selectedModel?.id || ""} onChange={(e) => ide.setSelectedModel(ide.availableModels.find(m => m.id === e.target.value)!)}>
+          <div className="panel-header"><span>AI Setup</span>
+            <select className="model-selector" value={ide.selectedModel.id} onChange={(e) => ide.setSelectedModel(ide.availableModels.find(m => m.id === e.target.value)!)}>
               {ide.availableModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
@@ -159,13 +156,13 @@ function App() {
             <div ref={chatEndRef} />
           </div>
           <div className="chat-input-area">
-            <textarea placeholder="Ask AI to read your workspace..." value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
-            <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Submit</button>
+            <textarea placeholder="Ask AI to code..." value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
+            <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Send</button>
           </div>
         </aside>
       </div>
       <footer className="status-bar">
-        <div className="status-group"><div className="status-item go-live-btn" onClick={ide.startLiveServer}>📡 Go Live (Port 3000)</div></div>
+        <div className="status-group"><div className="status-item go-live-btn" onClick={ide.startLiveServer}>📡 Go Live</div></div>
         <div className="status-group"><div className="status-item">{ide.settings.useWsl ? "WSL Active" : "Windows"}</div><div className="status-item">{time}</div></div>
       </footer>
     </div>
