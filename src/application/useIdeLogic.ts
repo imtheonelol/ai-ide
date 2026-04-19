@@ -8,7 +8,7 @@ export const useIdeLogic = () => {
   const [currentDir, setCurrentDir] = useState(() => localStorage.getItem("ide_workspace") || "./");
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem("ide_settings");
-    return saved ? JSON.parse(saved) : { theme: "dark", useWsl: false, openAiKey: "", geminiKey: "", showSidebar: true, showTerminal: true, showAiPanel: true };
+    return saved ? JSON.parse(saved) : { theme: "dark", useWsl: false, openAiKey: "", geminiKey: "", showSidebar: true, showTerminal: true, showAiPanel: true, isActivated: false };
   });
 
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -16,9 +16,12 @@ export const useIdeLogic = () => {
   const [code, setCode] = useState("// Welcome. Select a file.");
   
   const [activeTab, setActiveTab] = useState<"editor" | "preview" | "graph">("editor");
-  const [terminalOutput, setTerminalOutput] = useState("Godly IDE Console Ready.\nType commands below (e.g., 'cd folder', 'npm install').\n");
+  const [activeSidebar, setActiveSidebar] = useState<"files" | "git">("files");
+  
+  const [terminalOutput, setTerminalOutput] = useState("Godly IDE Console Ready.\n");
   const [showSettings, setShowSettings] = useState(false);
-  const [showTaskModal, setShowTaskModal] = useState(false); // NEW: Task Modal
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [availableModels, setAvailableModels] = useState<AIModel[]>(CLOUD_MODELS);
@@ -47,7 +50,7 @@ export const useIdeLogic = () => {
   const handleFileClick = async (file: FileEntry) => { if (!file.is_dir) { const content = await readFileContent(file.path); setActiveFile(file); setCode(content); setActiveTab("editor"); } };
   const handleDelete = async (file: FileEntry) => { if (confirm(`Delete ${file.name}?`)) { await deleteProjectFile(file.path, file.is_dir); if (activeFile?.path === file.path) { setActiveFile(null); setCode(""); } readProjectFiles(currentDir).then(setFiles); addToast(`Deleted ${file.name}`); } };
   const handleSaveFile = async () => { if (activeFile) { await saveFileContent(activeFile.path, code); addToast("File saved", "success"); } };
-  const handleNewFile = async (targetDir: string = currentDir) => { const fileName = prompt("File name (e.g. index.html):"); if (fileName) { await saveFileContent(`${targetDir}/${fileName}`, ""); readProjectFiles(currentDir).then(setFiles); } };
+  const handleNewFile = async (targetDir: string = currentDir) => { const fileName = prompt("File name:"); if (fileName) { await saveFileContent(`${targetDir}/${fileName}`, ""); readProjectFiles(currentDir).then(setFiles); } };
 
   const handleTerminalCommand = async (input: string) => {
     if (!input.trim()) return;
@@ -113,12 +116,9 @@ export const useIdeLogic = () => {
     } catch (err: any) { setChatHistory(prev => [...prev, { role: "error", content: err.message }]); addToast("AI Failed", "error"); } finally { setIsAiThinking(false); }
   };
 
-  const scheduleTask = async (name: string, cmd: string, time: string, recurring: boolean) => {
-    try {
-      const res = await scheduleBackgroundTask(name, cmd, currentDir, time, recurring);
-      addToast(res, "success");
-      setShowTaskModal(false);
-    } catch (e: any) { addToast(`Failed to schedule: ${e}`, "error"); }
+  const scheduleTask = async (name: string, script: string, scheduleType: string, scheduleValue: string) => {
+    try { const res = await scheduleBackgroundTask(name, script, currentDir, scheduleType, scheduleValue); addToast(res, "success"); setShowTaskModal(false); } 
+    catch (e: any) { addToast(`Failed to schedule: ${e}`, "error"); }
   };
 
   const startLiveServer = async () => { try { await spawnLiveServer(currentDir, 3000); await openInBrowser("http://localhost:3000"); addToast("Live Server Started", "success"); } catch (e) { addToast("Failed to start server", "error"); } };
@@ -140,10 +140,21 @@ export const useIdeLogic = () => {
     setTerminalOutput(prev => prev + `\n> ${cmd} ${args.join(" ")}\n` + out);
   };
 
+  // --- NEW: Generate Legal Files ---
+  const generateLegalFiles = async () => {
+    const license = `MIT License\n\nCopyright (c) ${new Date().getFullYear()}\n\nPermission is hereby granted, free of charge...`;
+    const privacy = `# Privacy Policy\n\nThis application respects your privacy and does not collect telemetry data.`;
+    await saveFileContent(`${currentDir}/LICENSE`, license);
+    await saveFileContent(`${currentDir}/PRIVACY.md`, privacy);
+    readProjectFiles(currentDir).then(setFiles);
+    addToast("Legal files generated!", "success");
+    setShowLicenseModal(false);
+  };
+
   return {
     isBooting, currentDir, setCurrentDir, files, activeFile, code, setCode,
-    activeTab, setActiveTab, terminalOutput, setTerminalOutput, handleTerminalCommand, runCode, startLiveServer,
-    showSettings, setShowSettings, showTaskModal, setShowTaskModal, scheduleTask, settings, setSettings, toggleView, toasts, addToast, refreshModels, 
+    activeTab, setActiveTab, activeSidebar, setActiveSidebar, terminalOutput, setTerminalOutput, handleTerminalCommand, runCode, startLiveServer,
+    showSettings, setShowSettings, showTaskModal, setShowTaskModal, showLicenseModal, setShowLicenseModal, scheduleTask, settings, setSettings, toggleView, toasts, addToast, refreshModels, generateLegalFiles,
     chatInput, setChatInput, chatHistory, isAiThinking, availableModels, selectedModel, setSelectedModel,
     handleFileClick, handleSaveFile, handleNewFile, handleAskAi, handleOpenFolder, handleDelete
   };

@@ -13,7 +13,6 @@ export const runTerminalCommand = async (cmd: string, args: string[], dir: strin
 export const spawnLiveServer = async (dir: string, port: number): Promise<string> => { return await invoke("spawn_server", { dir, port }); };
 export const openInBrowser = async (url: string): Promise<void> => { await openUrl(url); };
 
-// --- NEW: Schedule OS Tasks ---
-export const scheduleBackgroundTask = async (name: string, cmd: string, dir: string, time: string, recurring: boolean): Promise<string> => {
-  return await invoke("schedule_task", { name, cmd, dir, time, recurring });
+export const scheduleBackgroundTask = async (name: string, script: string, dir: string, scheduleType: string, scheduleValue: string): Promise<string> => {
+  return await invoke("schedule_task", { name, script, dir, scheduleType, scheduleValue });
 };

@@ -8,10 +8,10 @@ export interface AppSettings {
   useWsl: boolean;
   openAiKey: string;
   geminiKey: string;
-  // --- NEW: View Toggles ---
   showSidebar: boolean;
   showTerminal: boolean;
   showAiPanel: boolean;
+  isActivated: boolean;
 }
 
 export const CLOUD_MODELS: AIModel[] = [

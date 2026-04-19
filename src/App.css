@@ -170,3 +170,7 @@ html, body, #root { width: 100vw; height: 100vh; margin: 0; padding: 0; backgrou
 
 /* --- MENUS --- */
 hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+
+/* GIT SIDEBAR */
+.git-sidebar .text-btn { width: 100%; text-align: left; padding: 8px; font-size: 12px; }
+.git-sidebar .text-btn.primary { background: var(--accent); color: white; border: none; text-align: center; }

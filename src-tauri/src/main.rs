@@ -52,31 +52,40 @@ fn run_command(cmd: String, args: Vec<String>, dir: String) -> Result<String, St
     if !stderr.is_empty() && stdout.is_empty() { Ok(format!("Error:\n{}", stderr)) } else { Ok(format!("{}{}", stdout, stderr)) }
 }
 
-// --- NEW: OS Background Task Scheduler (Runs when IDE is closed) ---
+// --- UPGRADED: Multi-line Script Background Task Scheduler ---
 #[tauri::command]
-fn schedule_task(name: String, cmd: String, dir: String, time: String, recurring: bool) -> Result<String, String> {
+fn schedule_task(name: String, script: String, dir: String, schedule_type: String, schedule_value: String) -> Result<String, String> {
+    let script_ext = if cfg!(target_os = "windows") { "bat" } else { "sh" };
+    let script_path = format!("{}/.godly_task_{}.{}", dir, name, script_ext);
+    
+    // Save the multi-line script to a hidden file
+    fs::write(&script_path, &script).map_err(|e| format!("Failed to save script: {}", e))?;
+
     #[cfg(target_os = "windows")]
     {
-        let frequency = if recurring { "DAILY" } else { "ONCE" };
-        let full_cmd = format!("cd /d {} && {}", dir, cmd);
-        let task_cmd = format!("cmd.exe /c \"{}\"", full_cmd);
-        
+        let task_cmd = format!("cmd.exe /c \"{}\"", script_path);
         let mut command = Command::new("schtasks");
-        command.args(["/create", "/tn", &format!("GodlyIDE_{}", name), "/tr", &task_cmd, "/sc", frequency, "/st", &time, "/f"]);
-        command.creation_flags(0x08000000);
+        command.args(["/create", "/tn", &format!("GodlyIDE_{}", name), "/tr", &task_cmd, "/f"]);
+
+        if schedule_type == "interval" {
+            command.args(["/sc", "MINUTE", "/mo", &schedule_value]);
+        } else {
+            command.args(["/sc", "DAILY", "/st", &schedule_value]); // Exact Time
+        }
         
+        command.creation_flags(0x08000000);
         let output = command.output().map_err(|e| e.to_string())?;
-        if output.status.success() { Ok(format!("Task '{}' scheduled for {} ({})", name, time, frequency)) } 
+        if output.status.success() { Ok(format!("Multi-line Task '{}' scheduled successfully!", name)) } 
         else { Err(String::from_utf8_lossy(&output.stderr).to_string()) }
     }
     
     #[cfg(not(target_os = "windows"))]
     {
-        // Simple Cron representation for Linux/Mac
-        let cron_time = format!("{} {} * * {}", time.split(':').nth(1).unwrap(), time.split(':').nth(0).unwrap(), if recurring {"*"} else {"1-31"});
-        let cron_cmd = format!("(crontab -l 2>/dev/null; echo \"{} cd {} && {}\") | crontab -", cron_time, dir, cmd);
+        let cron_time = if schedule_type == "interval" { format!("*/{} * * * *", schedule_value) } 
+                        else { format!("{} {} * * *", schedule_value.split(':').nth(1).unwrap(), schedule_value.split(':').nth(0).unwrap()) };
+        let cron_cmd = format!("(crontab -l 2>/dev/null; echo \"{} cd {} && sh {}\") | crontab -", cron_time, dir, script_path);
         Command::new("sh").args(["-c", &cron_cmd]).output().map_err(|e| e.to_string())?;
-        Ok(format!("Task '{}' scheduled via crontab", name))
+        Ok(format!("Multi-line Task '{}' scheduled via crontab", name))
     }
 }
 
