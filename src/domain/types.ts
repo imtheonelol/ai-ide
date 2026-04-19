@@ -1,23 +1,17 @@
 export interface FileEntry { name: string; path: string; is_dir: boolean; }
 export interface ChatMessage { role: "user" | "ai" | "error" | "system"; content: string; }
-
-export interface AIModel {
-  id: string;
-  name: string;
-  provider: "ollama" | "openai" | "gemini";
-}
+export interface AIModel { id: string; name: string; provider: "ollama" | "openai" | "gemini"; }
+export interface Toast { id: number; message: string; type: "info" | "success" | "error"; }
 
 export interface AppSettings {
   theme: "dark" | "light";
   useWsl: boolean;
   openAiKey: string;
   geminiKey: string;
-}
-
-export interface Toast {
-  id: number;
-  message: string;
-  type: "info" | "success" | "error";
+  // --- NEW: View Toggles ---
+  showSidebar: boolean;
+  showTerminal: boolean;
+  showAiPanel: boolean;
 }
 
 export const CLOUD_MODELS: AIModel[] = [

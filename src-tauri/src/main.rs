@@ -38,48 +38,63 @@ fn delete_path(path: String, is_dir: bool) -> Result<(), String> {
     if is_dir { fs::remove_dir_all(path).map_err(|e| e.to_string()) } else { fs::remove_file(path).map_err(|e| e.to_string()) }
 }
 
-// --- UPGRADED: Real Shell Execution ---
 #[tauri::command]
 fn run_command(cmd: String, args: Vec<String>, dir: String) -> Result<String, String> {
     let (shell, shell_arg) = if cfg!(target_os = "windows") { ("cmd", "/C") } else { ("sh", "-c") };
     let full_cmd = format!("{} {}", cmd, args.join(" "));
-    
     let mut command = Command::new(shell);
     command.args([shell_arg, &full_cmd]).current_dir(dir);
-    
     #[cfg(target_os = "windows")] command.creation_flags(0x08000000); 
     
     let output = command.output().map_err(|e| format!("Execution failed: {}", e))?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    
-    if !stderr.is_empty() && stdout.is_empty() { Ok(format!("Error:\n{}", stderr)) } 
-    else { Ok(format!("{}{}", stdout, stderr)) }
+    if !stderr.is_empty() && stdout.is_empty() { Ok(format!("Error:\n{}", stderr)) } else { Ok(format!("{}{}", stdout, stderr)) }
 }
 
-// --- UPGRADED: Fallback Live Server ---
+// --- NEW: OS Background Task Scheduler (Runs when IDE is closed) ---
+#[tauri::command]
+fn schedule_task(name: String, cmd: String, dir: String, time: String, recurring: bool) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let frequency = if recurring { "DAILY" } else { "ONCE" };
+        let full_cmd = format!("cd /d {} && {}", dir, cmd);
+        let task_cmd = format!("cmd.exe /c \"{}\"", full_cmd);
+        
+        let mut command = Command::new("schtasks");
+        command.args(["/create", "/tn", &format!("GodlyIDE_{}", name), "/tr", &task_cmd, "/sc", frequency, "/st", &time, "/f"]);
+        command.creation_flags(0x08000000);
+        
+        let output = command.output().map_err(|e| e.to_string())?;
+        if output.status.success() { Ok(format!("Task '{}' scheduled for {} ({})", name, time, frequency)) } 
+        else { Err(String::from_utf8_lossy(&output.stderr).to_string()) }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Simple Cron representation for Linux/Mac
+        let cron_time = format!("{} {} * * {}", time.split(':').nth(1).unwrap(), time.split(':').nth(0).unwrap(), if recurring {"*"} else {"1-31"});
+        let cron_cmd = format!("(crontab -l 2>/dev/null; echo \"{} cd {} && {}\") | crontab -", cron_time, dir, cmd);
+        Command::new("sh").args(["-c", &cron_cmd]).output().map_err(|e| e.to_string())?;
+        Ok(format!("Task '{}' scheduled via crontab", name))
+    }
+}
+
 #[tauri::command]
 fn spawn_server(dir: String, port: u16) -> Result<String, String> {
-    // Try Node (npx) first
     let shell = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
     let shell_arg = if cfg!(target_os = "windows") { "/C" } else { "-c" };
     let node_cmd = format!("npx serve -p {}", port);
-    
     let mut command = Command::new(shell);
     command.args([shell_arg, &node_cmd]).current_dir(&dir);
     #[cfg(target_os = "windows")] command.creation_flags(0x08000000);
-    
-    if command.spawn().is_ok() {
-        return Ok(format!("Live Server started on port {} (Node.js)", port));
-    }
+    if command.spawn().is_ok() { return Ok(format!("Live Server started on port {} (Node.js)", port)); }
 
-    // Fallback to Python if Node fails
     let py_cmd = format!("python -m http.server {}", port);
     let mut py_command = Command::new(shell);
     py_command.args([shell_arg, &py_cmd]).current_dir(&dir);
     #[cfg(target_os = "windows")] py_command.creation_flags(0x08000000);
-    
-    py_command.spawn().map_err(|e| format!("Failed to start server. Install Node.js or Python. Error: {}", e))?;
+    py_command.spawn().map_err(|e| format!("Failed to start server. Error: {}", e))?;
     Ok(format!("Live Server started on port {} (Python)", port))
 }
 
@@ -100,29 +115,22 @@ async fn pull_model(model: String) -> Result<String, String> {
 #[tauri::command]
 async fn generate_ai_proxy(provider: String, model: String, prompt: String, system: String, api_key: String) -> Result<String, String> {
     let client = reqwest::Client::builder().timeout(Duration::from_secs(120)).build().unwrap();
-
     if provider == "openai" {
-        let res = client.post("https://api.openai.com/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", api_key)).json(&serde_json::json!({ "model": model, "messages": [ {"role": "system", "content": system}, {"role": "user", "content": prompt} ] }))
-            .send().await.map_err(|e| e.to_string())?;
+        let res = client.post("https://api.openai.com/v1/chat/completions").header("Authorization", format!("Bearer {}", api_key)).json(&serde_json::json!({ "model": model, "messages": [ {"role": "system", "content": system}, {"role": "user", "content": prompt} ] })).send().await.map_err(|e| e.to_string())?;
         let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
         if let Some(content) = json["choices"][0]["message"]["content"].as_str() { return Ok(content.to_string()); }
         return Err(format!("OpenAI Error: {}", json));
     } else if provider == "gemini" {
         let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", model, api_key);
-        let res = client.post(&url).json(&serde_json::json!({ "system_instruction": { "parts": { "text": system } }, "contents": [{ "parts": [{"text": prompt}] }] }))
-            .send().await.map_err(|e| e.to_string())?;
+        let res = client.post(&url).json(&serde_json::json!({ "system_instruction": { "parts": { "text": system } }, "contents": [{ "parts": [{"text": prompt}] }] })).send().await.map_err(|e| e.to_string())?;
         let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
         if let Some(content) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() { return Ok(content.to_string()); }
         return Err(format!("Gemini Error: {}", json));
     } else {
-        let res = client.post("http://localhost:11434/api/generate").json(&serde_json::json!({ "model": model, "prompt": prompt, "system": system, "stream": false }))
-            .send().await.map_err(|e| format!("Network Error: ({})", e))?;
+        let res = client.post("http://localhost:11434/api/generate").json(&serde_json::json!({ "model": model, "prompt": prompt, "system": system, "stream": false })).send().await.map_err(|e| format!("Network Error: ({})", e))?;
         if !res.status().is_success() { return Err(format!("Ollama Error: {}", res.text().await.unwrap_or_default())); }
         let text = res.text().await.unwrap();
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-            if let Some(resp) = json.get("response").and_then(|v| v.as_str()) { return Ok(resp.to_string()); }
-        }
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) { if let Some(resp) = json.get("response").and_then(|v| v.as_str()) { return Ok(resp.to_string()); } }
         Ok(text)
     }
 }
@@ -138,7 +146,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             list_files, read_file, write_file, create_folder, delete_path,
-            run_command, spawn_server, get_local_models, pull_model, generate_ai_proxy
+            run_command, schedule_task, spawn_server, get_local_models, pull_model, generate_ai_proxy
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
