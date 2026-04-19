@@ -47,27 +47,52 @@ fn create_folder(path: String) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| e.to_string())
 }
 
+// --- NEW: Run Terminal Commands ---
+#[tauri::command]
+fn run_command(cmd: String, args: Vec<String>, dir: String) -> Result<String, String> {
+    let mut command = Command::new(cmd);
+    command.args(args).current_dir(dir);
+    
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x08000000); // Hide terminal window
+
+    let output = command.output().map_err(|e| format!("Command failed: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    
+    if !stderr.is_empty() {
+        Ok(format!("{}\nError:\n{}", stdout, stderr))
+    } else {
+        Ok(stdout)
+    }
+}
+
+// --- NEW: Get Installed Models ---
+#[tauri::command]
+async fn get_local_models() -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let res = client.get("http://localhost:11434/api/tags").send().await.map_err(|e| e.to_string())?;
+    res.text().await.map_err(|e| e.to_string())
+}
+
+// --- NEW: Pull Model (Downloads in Background) ---
+#[tauri::command]
+async fn pull_model(model: String) -> Result<String, String> {
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(3600)).build().unwrap();
+    let _res = client.post("http://localhost:11434/api/pull")
+        .json(&serde_json::json!({"name": model, "stream": false}))
+        .send().await.map_err(|e| e.to_string())?;
+    Ok(format!("Successfully pulled {}", model))
+}
+
 #[tauri::command]
 async fn generate_ai_proxy(model: String, prompt: String, system: String) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-        .map_err(|e| format!("Failed to build client: {}", e))?;
-
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(300)).build().unwrap();
     let res = client.post("http://localhost:11434/api/generate")
-        .json(&serde_json::json!({
-            "model": model,
-            "prompt": prompt,
-            "system": system,
-            "stream": false
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Network Error: Is Ollama installed? ({})", e))?;
+        .json(&serde_json::json!({ "model": model, "prompt": prompt, "system": system, "stream": false }))
+        .send().await.map_err(|e| format!("Network Error: ({})", e))?;
 
-    // THE BUG FIX: Save the status BEFORE extracting the text
     let status = res.status(); 
-
     if !status.is_success() {
         let error_text = res.text().await.unwrap_or_default();
         return Err(format!("Ollama Error ({}): {}", status, error_text));
@@ -83,19 +108,17 @@ async fn generate_ai_proxy(model: String, prompt: String, system: String) -> Res
 }
 
 fn main() {
-    // --- AUTO-START OLLAMA SILENTLY ---
     let mut cmd = Command::new("ollama");
     cmd.arg("serve");
-    
     #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000); // Hides the black terminal box
-
-    let _ = cmd.spawn(); // Spawns in background. If already running, it safely fails.
+    cmd.creation_flags(0x08000000); 
+    let _ = cmd.spawn(); 
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            list_files, read_file, write_file, create_folder, generate_ai_proxy
+            list_files, read_file, write_file, create_folder, 
+            run_command, get_local_models, pull_model, generate_ai_proxy
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

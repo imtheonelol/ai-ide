@@ -5,7 +5,7 @@ export interface FileEntry {
 }
 
 export interface ChatMessage {
-  role: "user" | "ai" | "error";
+  role: "user" | "ai" | "error" | "system";
   content: string;
 }
 
@@ -14,9 +14,7 @@ export interface AIModel {
   name: string;
 }
 
-// These IDs now exactly match the models installed on your laptop!
-export const SUPPORTED_MODELS: AIModel[] = [
-  { id: "qwen2.5:1.5b", name: "Qwen 2.5 (1.5B) - Fast / Low RAM" },
-  { id: "qwen2.5:7b", name: "Qwen 2.5 (7B) - Smart / Mid RAM" },
-  { id: "deepseek-coder:6.7b", name: "DeepSeek (6.7B) - (Requires Download)" }
-];
+export interface AppSettings {
+  autoSaveAI: boolean;
+  theme: "dark" | "light";
+}
