@@ -1,4 +1,3 @@
-// src/infrastructure/aiService.ts
 export interface AIRequest {
   model: string;
   prompt: string;
@@ -14,16 +13,18 @@ export const generateAIResponse = async (request: AIRequest): Promise<string> =>
         model: request.model,
         prompt: request.prompt,
         system: request.system,
-        stream: false,
+        stream: false, // For simplicity in this phase, we wait for the full response
       }),
     });
 
-    if (!response.ok) throw new Error("Local AI server is not responding.");
+    if (!response.ok) {
+      throw new Error(`AI server responded with status: ${response.status}`);
+    }
     
     const data = await response.json();
     return data.response;
   } catch (error) {
     console.error("AI Generation Error:", error);
-    return "// Error: Could not connect to local AI. Ensure Ollama is running.";
+    throw error;
   }
 };
