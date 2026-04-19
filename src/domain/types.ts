@@ -14,9 +14,9 @@ export interface AIModel {
   name: string;
 }
 
-// Our supported models for web development
+// These IDs now exactly match the models installed on your laptop!
 export const SUPPORTED_MODELS: AIModel[] = [
-  { id: "qwen2.5-coder:1.5b", name: "Qwen 1.5B (Fast/Low RAM)" },
-  { id: "qwen2.5-coder:7b", name: "Qwen 7B (Smart/Mid RAM)" },
-  { id: "deepseek-coder:6.7b", name: "DeepSeek 6.7B (Godly/High RAM)" }
+  { id: "qwen2.5:1.5b", name: "Qwen 2.5 (1.5B) - Fast / Low RAM" },
+  { id: "qwen2.5:7b", name: "Qwen 2.5 (7B) - Smart / Mid RAM" },
+  { id: "deepseek-coder:6.7b", name: "DeepSeek (6.7B) - (Requires Download)" }
 ];
