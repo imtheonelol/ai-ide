@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
-import { search } from "@codemirror/search"; // The new Search plugin!
+import { search } from "@codemirror/search"; 
 import { useIdeLogic } from "./application/useIdeLogic";
 import { pullNewModel } from "./infrastructure/aiService";
 import { FileEntry } from "./domain/types";
@@ -39,13 +39,11 @@ function App() {
   const [newModelName, setNewModelName] = useState("");
   const [time, setTime] = useState(new Date().toLocaleTimeString());
 
-  // Clock tick
   useEffect(() => { const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 50); }, [ide.chatHistory, ide.isAiThinking]);
 
-  // Editor Extensions with built-in Ctrl+F Search
   const editorExtensions = useMemo(() => {
-    const exts = [search({ top: true })]; // Adds Ctrl+F Search Bar to top of editor!
+    const exts = [search({ top: true })]; 
     if (ide.activeFile?.name.endsWith(".html")) exts.push(html());
     else if (ide.activeFile?.name.endsWith(".css")) exts.push(css());
     else exts.push(javascript({ jsx: true, typescript: true }));
@@ -54,7 +52,6 @@ function App() {
 
   return (
     <div className={`ide-wrapper theme-${ide.settings.theme}`}>
-      {/* TOP MENU BAR (VS Code Style) */}
       <div className="top-menu-bar">
         <div className="menu-group">
           <img src="/tauri.svg" alt="logo" className="menu-logo" />
@@ -65,16 +62,18 @@ function App() {
               <div onClick={ide.handleSaveFile}>Save (Ctrl+S)</div>
             </div>
           </div>
-          <div className="menu-item has-dropdown">Edit
+          <div className="menu-item has-dropdown">Git
             <div className="dropdown">
-              <div>Undo (Ctrl+Z)</div>
-              <div>Redo (Ctrl+Y)</div>
-              <div>Find (Ctrl+F)</div>
+              <div onClick={() => ide.handleGitCommand("status")}>Status</div>
+              <div onClick={() => ide.handleGitCommand("add")}>Add All</div>
+              <div onClick={() => ide.handleGitCommand("commit")}>Commit...</div>
+              <div onClick={() => ide.handleGitCommand("pull")}>Pull</div>
+              <div onClick={() => ide.handleGitCommand("push")}>Push</div>
             </div>
           </div>
           <div className="menu-item has-dropdown">Run
             <div className="dropdown">
-              <div onClick={ide.runCode}>Run Active File</div>
+              <div onClick={ide.runCode}>Execute Active File {ide.settings.useWsl ? "(WSL)" : ""}</div>
             </div>
           </div>
           <div className="menu-item has-dropdown">Terminal
@@ -82,16 +81,12 @@ function App() {
               <div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div>
             </div>
           </div>
-          <div className="menu-item has-dropdown">Help
-            <div className="dropdown"><div>About Godly IDE</div></div>
-          </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div>
         <div className="menu-spacer"></div>
       </div>
 
       <div className="ide-container">
-        {/* Settings Modal (Unchanged from previous) */}
         {ide.showSettings && (
           <div className="modal-overlay" onClick={() => ide.setShowSettings(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -102,6 +97,7 @@ function App() {
                     <option value="dark">VS Dark</option><option value="light">VS Light</option>
                   </select>
                 </label><br/><br/>
+                <label><input type="checkbox" checked={ide.settings.useWsl} onChange={e => ide.setSettings({...ide.settings, useWsl: e.target.checked})} /> Run code natively in WSL (Linux)</label><br/><br/>
                 <label><input type="checkbox" checked={ide.settings.autoSaveAI} onChange={e => ide.setSettings({...ide.settings, autoSaveAI: e.target.checked})} /> Auto-save AI files</label>
               </div>
               <button className="close-btn" onClick={() => ide.setShowSettings(false)}>Close</button>
@@ -131,7 +127,7 @@ function App() {
           <header className="editor-header">
             <div className="tabs">
               <div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>{ide.activeFile?.name || "Code"}</div>
-              <div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Live Preview</div>
+              <div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Iframe Preview</div>
             </div>
             <div className="editor-actions">
               <button className="text-btn outline" onClick={ide.runCode}>▶ Run Code</button>
@@ -140,7 +136,7 @@ function App() {
 
           <div className="editor-workspace">
             {ide.activeTab === "editor" ? (
-              <CodeMirror value={ide.code} theme={ide.settings.theme} extensions={editorExtensions} onChange={(val) => ide.setCode(val)} onKeyDown={(e) => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); ide.handleSaveFile(); }}} />
+              <CodeMirror value={ide.code} theme={ide.settings.theme === "light" ? "light" : "dark"} extensions={editorExtensions} onChange={(val) => ide.setCode(val)} onKeyDown={(e) => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); ide.handleSaveFile(); }}} />
             ) : (
               <iframe className="preview-frame" srcDoc={ide.code} title="Live Preview" sandbox="allow-scripts allow-same-origin" />
             )}
@@ -171,13 +167,13 @@ function App() {
         </aside>
       </div>
 
-      {/* STATUS BAR WITH TIME, THEME, AND GO LIVE */}
       <footer className="status-bar">
         <div className="status-group">
-          <div className="status-item go-live-btn" onClick={() => ide.setActiveTab("preview")}>📡 Go Live</div>
+          <div className="status-item go-live-btn" onClick={ide.startLiveServer}>📡 Go Live (Browser)</div>
           <div className="status-item error">❌ 0  ⚠️ 0</div>
         </div>
         <div className="status-group">
+          <div className="status-item">{ide.settings.useWsl ? "🐧 WSL Active" : "🪟 Windows"}</div>
           <div className="status-item">{ide.activeFile ? `Editing: ${ide.activeFile.name}` : "Idle"}</div>
           <div className="status-item">UTF-8</div>
           <div className="status-item">{time}</div>

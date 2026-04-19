@@ -16,5 +16,6 @@ export interface AIModel {
 
 export interface AppSettings {
   autoSaveAI: boolean;
-  theme: "dark" | "light";
+  theme: "dark" | "light" | "dracula" | "monokai";
+  useWsl: boolean;
 }

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { open as openUrl } from "@tauri-apps/plugin-opener";
 import { FileEntry } from "../domain/types";
 
 export const readProjectFiles = async (path: string): Promise<FileEntry[]> => {
@@ -23,4 +24,10 @@ export const openNativeFolderPicker = async (): Promise<string | null> => {
 };
 export const runTerminalCommand = async (cmd: string, args: string[], dir: string): Promise<string> => {
   try { return await invoke("run_command", { cmd, args, dir }); } catch (e) { return String(e); }
+};
+export const spawnLiveServer = async (dir: string, port: number): Promise<string> => {
+  return await invoke("spawn_server", { dir, port });
+};
+export const openInBrowser = async (url: string): Promise<void> => {
+  await openUrl(url);
 };

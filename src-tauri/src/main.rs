@@ -11,7 +11,6 @@ use std::os::windows::process::CommandExt;
 fn list_files(path: String) -> Result<Vec<serde_json::Value>, String> {
     let mut files = Vec::new();
     let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
-    
     for entry in entries.flatten() {
         let meta = entry.metadata().unwrap();
         files.push(serde_json::json!({
@@ -20,7 +19,6 @@ fn list_files(path: String) -> Result<Vec<serde_json::Value>, String> {
             "is_dir": meta.is_dir()
         }));
     }
-    
     files.sort_by(|a, b| {
         let a_is_dir = a["is_dir"].as_bool().unwrap_or(false);
         let b_is_dir = b["is_dir"].as_bool().unwrap_or(false);
@@ -28,7 +26,6 @@ fn list_files(path: String) -> Result<Vec<serde_json::Value>, String> {
         else if !a_is_dir && b_is_dir { std::cmp::Ordering::Greater }
         else { a["name"].as_str().cmp(&b["name"].as_str()) }
     });
-    
     Ok(files)
 }
 
@@ -41,11 +38,9 @@ fn write_file(path: String, contents: String) -> Result<(), String> { fs::write(
 #[tauri::command]
 fn create_folder(path: String) -> Result<(), String> { fs::create_dir_all(path).map_err(|e| e.to_string()) }
 
-// --- NEW: Delete File or Folder ---
 #[tauri::command]
 fn delete_path(path: String, is_dir: bool) -> Result<(), String> {
-    if is_dir { fs::remove_dir_all(path).map_err(|e| e.to_string()) } 
-    else { fs::remove_file(path).map_err(|e| e.to_string()) }
+    if is_dir { fs::remove_dir_all(path).map_err(|e| e.to_string()) } else { fs::remove_file(path).map_err(|e| e.to_string()) }
 }
 
 #[tauri::command]
@@ -57,6 +52,18 @@ fn run_command(cmd: String, args: Vec<String>, dir: String) -> Result<String, St
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     if !stderr.is_empty() { Ok(format!("{}\nError:\n{}", stdout, stderr)) } else { Ok(stdout) }
+}
+
+// --- NEW: SPAWN DETACHED SERVER ---
+#[tauri::command]
+fn spawn_server(dir: String, port: u16) -> Result<String, String> {
+    // Uses Node's npx to serve the directory securely in the background
+    let cmd = if cfg!(target_os = "windows") { "npx.cmd" } else { "npx" };
+    let mut command = Command::new(cmd);
+    command.args(["serve", "-p", &port.to_string()]).current_dir(dir);
+    #[cfg(target_os = "windows")] command.creation_flags(0x08000000);
+    command.spawn().map_err(|e| format!("Failed to start server: {}", e))?;
+    Ok(format!("Server started on port {}", port))
 }
 
 #[tauri::command]
@@ -96,11 +103,11 @@ fn main() {
     let _ = cmd.spawn(); 
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init()) // Initialize the native dialog plugin!
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             list_files, read_file, write_file, create_folder, delete_path,
-            run_command, get_local_models, pull_model, generate_ai_proxy
+            run_command, spawn_server, get_local_models, pull_model, generate_ai_proxy
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
