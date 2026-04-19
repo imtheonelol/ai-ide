@@ -39,10 +39,13 @@ function App() {
   useEffect(() => { const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 50); }, [ide.chatHistory, ide.isAiThinking]);
 
+  // CRITICAL BUG FIX HERE: We safely check if the file exists before checking its extension
   const editorExtensions = useMemo(() => {
     const exts = [search({ top: true })]; 
-    if (ide.activeFile?.name.endsWith(".html")) exts.push(html());
-    else if (ide.activeFile?.name.endsWith(".css")) exts.push(css());
+    const fileName = ide.activeFile?.name || ""; // Prevents the crash!
+    
+    if (fileName.endsWith(".html")) exts.push(html());
+    else if (fileName.endsWith(".css")) exts.push(css());
     else exts.push(javascript({ jsx: true, typescript: true }));
     return exts;
   }, [ide.activeFile?.name]);
@@ -146,7 +149,7 @@ function App() {
 
         <aside className="ai-panel">
           <div className="panel-header"><span>AI Setup</span>
-            <select className="model-selector" value={ide.selectedModel.id} onChange={(e) => ide.setSelectedModel(ide.availableModels.find(m => m.id === e.target.value)!)}>
+            <select className="model-selector" value={ide.selectedModel?.id || ""} onChange={(e) => ide.setSelectedModel(ide.availableModels.find(m => m.id === e.target.value)!)}>
               {ide.availableModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>

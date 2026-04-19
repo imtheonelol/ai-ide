@@ -12,10 +12,9 @@
   "app": {
     "windows": [
       {
-    "title": "ai-ide",
-    "width": 1200,
-    "height": 800,
-    "backgroundColor": "rgba(30, 30, 30, 1)"
+        "title": "ai-ide",
+        "width": 1280,
+        "height": 800
       }
     ],
     "security": {
