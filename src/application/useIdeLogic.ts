@@ -50,7 +50,11 @@ export const useIdeLogic = () => {
   const handleFileClick = async (file: FileEntry) => { if (!file.is_dir) { const content = await readFileContent(file.path); setActiveFile(file); setCode(content); setActiveTab("editor"); } };
   const handleDelete = async (file: FileEntry) => { if (confirm(`Delete ${file.name}?`)) { await deleteProjectFile(file.path, file.is_dir); if (activeFile?.path === file.path) { setActiveFile(null); setCode(""); } readProjectFiles(currentDir).then(setFiles); addToast(`Deleted ${file.name}`); } };
   const handleSaveFile = async () => { if (activeFile) { await saveFileContent(activeFile.path, code); addToast("File saved", "success"); } };
+  
   const handleNewFile = async (targetDir: string = currentDir) => { const fileName = prompt("File name:"); if (fileName) { await saveFileContent(`${targetDir}/${fileName}`, ""); readProjectFiles(currentDir).then(setFiles); } };
+  
+  // FIX: Dedicated folder handler prevents passing an array back to the React String State!
+  const handleNewFolder = async (targetDir: string = currentDir) => { const folderName = prompt("Folder name:"); if (folderName) { await createProjectFolder(`${targetDir}/${folderName}`); readProjectFiles(currentDir).then(setFiles); } };
 
   const handleTerminalCommand = async (input: string) => {
     if (!input.trim()) return;
@@ -140,7 +144,6 @@ export const useIdeLogic = () => {
     setTerminalOutput(prev => prev + `\n> ${cmd} ${args.join(" ")}\n` + out);
   };
 
-  // --- NEW: Generate Legal Files ---
   const generateLegalFiles = async () => {
     const license = `MIT License\n\nCopyright (c) ${new Date().getFullYear()}\n\nPermission is hereby granted, free of charge...`;
     const privacy = `# Privacy Policy\n\nThis application respects your privacy and does not collect telemetry data.`;
@@ -156,6 +159,6 @@ export const useIdeLogic = () => {
     activeTab, setActiveTab, activeSidebar, setActiveSidebar, terminalOutput, setTerminalOutput, handleTerminalCommand, runCode, startLiveServer,
     showSettings, setShowSettings, showTaskModal, setShowTaskModal, showLicenseModal, setShowLicenseModal, scheduleTask, settings, setSettings, toggleView, toasts, addToast, refreshModels, generateLegalFiles,
     chatInput, setChatInput, chatHistory, isAiThinking, availableModels, selectedModel, setSelectedModel,
-    handleFileClick, handleSaveFile, handleNewFile, handleAskAi, handleOpenFolder, handleDelete
+    handleFileClick, handleSaveFile, handleNewFile, handleNewFolder, handleAskAi, handleOpenFolder, handleDelete
   };
 };

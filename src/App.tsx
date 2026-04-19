@@ -11,10 +11,11 @@ import { toPng } from 'html-to-image';
 import { useIdeLogic } from "./application/useIdeLogic";
 import { pullNewModel } from "./infrastructure/aiService";
 import { FileEntry } from "./domain/types";
-import { readProjectFiles, createProjectFolder } from "./infrastructure/fileSystem";
+import { readProjectFiles } from "./infrastructure/fileSystem";
 import "./App.css";
 
-const FileTreeNode = ({ file, ide, paddingLeft }: { file: FileEntry, ide: any, paddingLeft: number }) => {
+// FIX: Added onContextMenu prop to handle right clicks natively in React!
+const FileTreeNode = ({ file, ide, paddingLeft, onContextMenu }: { file: FileEntry, ide: any, paddingLeft: number, onContextMenu: (e: React.MouseEvent, f: FileEntry) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [children, setChildren] = useState<FileEntry[]>([]);
   const toggleOpen = async () => {
@@ -25,12 +26,16 @@ const FileTreeNode = ({ file, ide, paddingLeft }: { file: FileEntry, ide: any, p
   };
   return (
     <div>
-      <div className={`file-item ${ide.activeFile?.path === file.path ? "active" : ""}`} style={{ paddingLeft: `${paddingLeft}px` }}>
+      <div 
+        className={`file-item ${ide.activeFile?.path === file.path ? "active" : ""}`} 
+        style={{ paddingLeft: `${paddingLeft}px` }}
+        onContextMenu={(e) => onContextMenu(e, file)}
+      >
         <span className="file-icon" onClick={toggleOpen}>{file.is_dir ? (isOpen ? "v" : ">") : "≡"}</span> 
         <span className="file-name" onClick={toggleOpen}>{file.name}</span>
         <span className="file-delete" onClick={(e) => { e.stopPropagation(); ide.handleDelete(file); }}>✕</span>
       </div>
-      {isOpen && children.map((child, i) => <FileTreeNode key={i} file={child} ide={ide} paddingLeft={paddingLeft + 15} />)}
+      {isOpen && children.map((child, i) => <FileTreeNode key={i} file={child} ide={ide} paddingLeft={paddingLeft + 15} onContextMenu={onContextMenu} />)}
     </div>
   );
 };
@@ -80,7 +85,9 @@ function App() {
   const [fileFilter, setFileFilter] = useState("");
   const [termInput, setTermInput] = useState("");
   
-  // Task Scheduler State
+  // Right Click Context Menu State
+  const [contextMenu, setContextMenu] = useState<{x: number, y: number, file: FileEntry} | null>(null);
+
   const [taskName, setTaskName] = useState("DailyBackup");
   const [taskScript, setTaskScript] = useState("git add .\ngit commit -m \"Automated backup\"\ngit push origin main");
   const [scheduleType, setScheduleType] = useState("time");
@@ -112,6 +119,11 @@ function App() {
     ide.addToast(`Action: ${command}`, "info");
   };
 
+  const handleContextMenu = (e: React.MouseEvent, file: FileEntry) => {
+    e.preventDefault();
+    setContextMenu({ x: e.pageX, y: e.pageY, file });
+  };
+
   if (ide.isBooting) {
     return (
       <div className="boot-screen">
@@ -122,8 +134,15 @@ function App() {
   }
 
   return (
-    <div className={`ide-wrapper theme-${ide.settings.theme}`}>
+    <div className={`ide-wrapper theme-${ide.settings.theme}`} onClick={() => setContextMenu(null)}>
       <div className="toast-container">{ide.toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.message}</div>)}</div>
+
+      {/* CUSTOM RIGHT-CLICK CONTEXT MENU */}
+      {contextMenu && (
+        <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }}>
+          <div onClick={() => ide.handleDelete(contextMenu.file)}>🗑️ Delete {contextMenu.file.name}</div>
+        </div>
+      )}
 
       {/* FULL VS CODE MENU */}
       <div className="top-menu-bar">
@@ -153,7 +172,7 @@ function App() {
             <div className="dropdown"><div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div><div onClick={() => ide.setShowTaskModal(true)}>Background Task Scheduler</div></div>
           </div>
           <div className="menu-item has-dropdown">Help
-            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v3.0 - Uncompromising Architecture.")}>About</div></div>
+            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v4.0 - Uncompromising Architecture.")}>About</div></div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -212,7 +231,7 @@ function App() {
           </div>
         )}
 
-        {/* Settings Modal (Unchanged) */}
+        {/* Settings Modal */}
         {ide.showSettings && (
           <div className="modal-overlay" onClick={() => ide.setShowSettings(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -239,14 +258,12 @@ function App() {
           </div>
         )}
 
-        {/* ACTIVITY BAR */}
         <div className="activity-bar">
           <div className={`activity-icon ${ide.activeSidebar === 'files' ? 'active' : ''}`} onClick={() => ide.setActiveSidebar('files')}>Files</div>
           <div className={`activity-icon ${ide.activeSidebar === 'git' ? 'active' : ''}`} onClick={() => ide.setActiveSidebar('git')}>GitHub</div>
           <div className="activity-icon" onClick={() => ide.setShowSettings(true)}>Settings</div>
         </div>
 
-        {/* VIEW TOGGLE: SIDEBAR (Explorer OR Git) */}
         {ide.settings.showSidebar && (
           <nav className="sidebar">
             {ide.activeSidebar === 'files' ? (
@@ -254,11 +271,12 @@ function App() {
                 <div className="sidebar-header"><span>Explorer</span>
                   <div className="sidebar-actions">
                     <button onClick={() => ide.handleNewFile(ide.currentDir)}>+</button>
-                    <button onClick={() => createProjectFolder(`${ide.currentDir}/NewFolder`).then(() => readProjectFiles(ide.currentDir).then(ide.setCurrentDir))}>📁</button>
+                    {/* FIX: Handled the folder creation correctly without crashing React path strings */}
+                    <button onClick={() => ide.handleNewFolder(ide.currentDir)}>📁</button>
                   </div>
                 </div>
                 <div style={{padding: "5px 10px"}}><input type="text" placeholder="Search..." value={fileFilter} onChange={e => setFileFilter(e.target.value)} style={{width: "100%", background: "#1e1e1e", border: "1px solid #333", color: "white", padding: "4px", fontSize: "11px"}}/></div>
-                <div className="file-list">{ide.files.filter(f => f.name.toLowerCase().includes(fileFilter.toLowerCase())).map((f, i) => <FileTreeNode key={i} file={f} ide={ide} paddingLeft={15} />)}</div>
+                <div className="file-list">{ide.files.filter(f => f.name.toLowerCase().includes(fileFilter.toLowerCase())).map((f, i) => <FileTreeNode key={i} file={f} ide={ide} paddingLeft={15} onContextMenu={handleContextMenu} />)}</div>
               </>
             ) : (
               <div className="git-sidebar">
