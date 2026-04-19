@@ -4,9 +4,9 @@ import { javascript } from "@codemirror/lang-javascript";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
 
-import { useIdeLogic } from "../application/useIdeLogic";
-import { SUPPORTED_MODELS, FileEntry } from "../domain/types";
-import { readProjectFiles } from "../infrastructure/fileSystem";
+import { useIdeLogic } from "./application/useIdeLogic";
+import { SUPPORTED_MODELS, FileEntry } from "./domain/types";
+import { readProjectFiles } from "./infrastructure/fileSystem";
 import "./App.css";
 
 // Recursive Tree Component for Nested Folders
@@ -47,9 +47,12 @@ function App() {
   const ide = useIdeLogic();
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // BUG FIX: Auto-scroll now watches the thinking state and forces DOM to update first
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [ide.chatHistory]);
+    setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 50);
+  }, [ide.chatHistory, ide.isAiThinking]);
 
   // CRITICAL FIX: useMemo prevents CodeMirror from resetting on save!
   const editorExtensions = useMemo(() => {
@@ -60,7 +63,7 @@ function App() {
 
   return (
     <div className="ide-container">
-      {/* ACTIVITY BAR (The thin far-left bar) */}
+      {/* ACTIVITY BAR */}
       <div className="activity-bar">
         <div className="activity-icon active" title="Explorer">📄</div>
         <div className="activity-icon" title="Search">🔍</div>
@@ -136,7 +139,7 @@ function App() {
         </div>
       </aside>
 
-      {/* STATUS BAR (VS Code Style Bottom Bar) */}
+      {/* STATUS BAR */}
       <footer className="status-bar">
         <div className="status-item">Godly IDE v1.0</div>
         <div className="status-item">Ollama: Auto-Managed</div>

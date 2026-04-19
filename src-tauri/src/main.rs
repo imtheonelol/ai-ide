@@ -65,10 +65,12 @@ async fn generate_ai_proxy(model: String, prompt: String, system: String) -> Res
         .await
         .map_err(|e| format!("Network Error: Is Ollama installed? ({})", e))?;
 
-    if !res.status().is_success() {
+    // THE BUG FIX: Save the status BEFORE extracting the text
+    let status = res.status(); 
+
+    if !status.is_success() {
         let error_text = res.text().await.unwrap_or_default();
-        // This will catch the 404 and tell you exactly what model is missing
-        return Err(format!("Ollama Error ({}): {}", res.status(), error_text));
+        return Err(format!("Ollama Error ({}): {}", status, error_text));
     }
 
     let text = res.text().await.map_err(|e| e.to_string())?;
@@ -86,9 +88,9 @@ fn main() {
     cmd.arg("serve");
     
     #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW (Hides the black terminal box)
+    cmd.creation_flags(0x08000000); // Hides the black terminal box
 
-    let _ = cmd.spawn(); // Spawns in background. If already running, it just safely fails.
+    let _ = cmd.spawn(); // Spawns in background. If already running, it safely fails.
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
