@@ -47,10 +47,20 @@ fn run_command(cmd: String, args: Vec<String>, dir: String) -> Result<String, St
     if !stderr.is_empty() { Ok(format!("{}\nError:\n{}", stdout, stderr)) } else { Ok(stdout) }
 }
 
+// --- FIXED: Windows Native Live Server Execution ---
 #[tauri::command]
 fn spawn_server(dir: String, port: u16) -> Result<String, String> {
-    let cmd = if cfg!(target_os = "windows") { "npx.cmd" } else { "npx" };
-    let mut command = Command::new(cmd); command.args(["serve", "-p", &port.to_string()]).current_dir(dir);
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = Command::new("cmd");
+        c.args(["/C", &format!("npx --yes serve -p {}", port)]);
+        c
+    } else {
+        let mut c = Command::new("npx");
+        c.args(["--yes", "serve", "-p", &port.to_string()]);
+        c
+    };
+    
+    command.current_dir(dir);
     #[cfg(target_os = "windows")] command.creation_flags(0x08000000);
     command.spawn().map_err(|e| format!("Failed to start server: {}", e))?;
     Ok(format!("Server started on port {}", port))
@@ -70,10 +80,9 @@ async fn pull_model(model: String) -> Result<String, String> {
     Ok(format!("Successfully pulled {}", model))
 }
 
-// --- UPGRADED: Multi-Provider AI Router ---
 #[tauri::command]
 async fn generate_ai_proxy(provider: String, model: String, prompt: String, system: String, api_key: String) -> Result<String, String> {
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(120)).build().unwrap();
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(300)).build().unwrap();
 
     if provider == "openai" {
         let res = client.post("https://api.openai.com/v1/chat/completions")
@@ -83,7 +92,6 @@ async fn generate_ai_proxy(provider: String, model: String, prompt: String, syst
         let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
         if let Some(content) = json["choices"][0]["message"]["content"].as_str() { return Ok(content.to_string()); }
         return Err(format!("OpenAI Error: {}", json));
-
     } else if provider == "gemini" {
         let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", model, api_key);
         let res = client.post(&url)
@@ -92,9 +100,7 @@ async fn generate_ai_proxy(provider: String, model: String, prompt: String, syst
         let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
         if let Some(content) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() { return Ok(content.to_string()); }
         return Err(format!("Gemini Error: {}", json));
-
     } else {
-        // Ollama Local
         let res = client.post("http://localhost:11434/api/generate")
             .json(&serde_json::json!({ "model": model, "prompt": prompt, "system": system, "stream": false }))
             .send().await.map_err(|e| format!("Network Error: ({})", e))?;
@@ -108,7 +114,6 @@ async fn generate_ai_proxy(provider: String, model: String, prompt: String, syst
 }
 
 fn main() {
-    // FIXED: Silences the Ollama already running error!
     let mut cmd = Command::new("ollama");
     cmd.arg("serve").stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(target_os = "windows")] cmd.creation_flags(0x08000000); 

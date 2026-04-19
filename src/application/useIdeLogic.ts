@@ -4,7 +4,6 @@ import { readProjectFiles, readFileContent, saveFileContent, createProjectFolder
 import { generateAIResponse, getLocalModels } from "../infrastructure/aiService";
 
 export const useIdeLogic = () => {
-  // --- NEW: Persistent Database Memory ---
   const [currentDir, setCurrentDir] = useState(() => localStorage.getItem("ide_workspace") || "./");
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem("ide_settings");
@@ -24,41 +23,30 @@ export const useIdeLogic = () => {
   const [selectedModel, setSelectedModel] = useState<AIModel>(CLOUD_MODELS[0]);
   const [chatInput, setChatInput] = useState("");
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous AI Agent Online. I can now directly alter and delete your files." }]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous AI Agent Online. I can execute cross-file modifications." }]);
 
   const addToast = (msg: string, type: "info" | "success" | "error" = "info") => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message: msg, type }]);
+    const id = Date.now(); setToasts(prev => [...prev, { id, message: msg, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
   };
 
-  // Save workspace & settings automatically when they change
-  useEffect(() => { 
-    localStorage.setItem("ide_workspace", currentDir);
-    readProjectFiles(currentDir).then(setFiles); 
-  }, [currentDir]);
-
+  useEffect(() => { localStorage.setItem("ide_workspace", currentDir); readProjectFiles(currentDir).then(setFiles); }, [currentDir]);
   useEffect(() => { localStorage.setItem("ide_settings", JSON.stringify(settings)); }, [settings]);
 
-  // --- NEW: Seamless Model Refresh ---
   const refreshModels = async () => {
     const models = await getLocalModels();
     setAvailableModels([...models, ...CLOUD_MODELS]);
-    // Automatically select the first local model if it exists
     if (models.length > 0 && selectedModel.provider !== "ollama") setSelectedModel(models[0]);
   };
-
   useEffect(() => { refreshModels(); }, []);
 
   const handleOpenFolder = async () => {
     const newPath = await openNativeFolderPicker();
     if (newPath) { setCurrentDir(newPath); setActiveFile(null); setCode(""); addToast("Workspace loaded", "success"); }
   };
-
   const handleFileClick = async (file: FileEntry) => {
     if (!file.is_dir) { const content = await readFileContent(file.path); setActiveFile(file); setCode(content); setActiveTab("editor"); }
   };
-
   const handleDelete = async (file: FileEntry) => {
     if (confirm(`Delete ${file.name}?`)) {
       await deleteProjectFile(file.path, file.is_dir);
@@ -66,9 +54,7 @@ export const useIdeLogic = () => {
       readProjectFiles(currentDir).then(setFiles); addToast(`Deleted ${file.name}`);
     }
   };
-
   const handleSaveFile = async () => { if (activeFile) { await saveFileContent(activeFile.path, code); addToast("File saved", "success"); } };
-
   const handleNewFile = async (targetDir: string = currentDir) => {
     const fileName = prompt("File name (e.g. index.html):");
     if (fileName) { await saveFileContent(`${targetDir}/${fileName}`, ""); readProjectFiles(currentDir).then(setFiles); }
@@ -86,7 +72,7 @@ export const useIdeLogic = () => {
     return context;
   };
 
-  // --- UPGRADED: Autonomous Agent Action Parser ---
+  // --- HIGHLY OPTIMIZED AGENT PARSER ---
   const handleAskAi = async () => {
     if (!chatInput.trim()) return;
     const userMsg = chatInput;
@@ -96,31 +82,29 @@ export const useIdeLogic = () => {
       const workspaceContext = await getWorkspaceContext();
       const apiKey = selectedModel.provider === "openai" ? settings.openAiKey : settings.geminiKey;
       
-      // Strict Instructions to act as an Agent, not a Chatbot
-      const systemPrompt = `You are an Autonomous IDE Agent. You have full control over the user's files.
-      NEVER use markdown asterisks (**) in your chat responses. Keep your chat text plain, brief, and professional.
-      
-      To CREATE or OVERWRITE a file, you MUST output this exact block:
-      @@@FILE-WRITE: path/to/filename.ext
-      [file content here without markdown code blocks]
-      @@@END-FILE
-      
-      To DELETE a file, output this exact line:
-      @@@FILE-DELETE: path/to/filename.ext
-      
-      You can output multiple actions at once. Act intelligently to fix the user's codebase.`;
+      const systemPrompt = `You are a highly efficient Autonomous IDE Agent. Execute code changes directly.
+      Rules:
+      1. NEVER use markdown formatting like **bold** in your responses. Keep chat text plain.
+      2. Minimize resource usage. Output ONLY the necessary changes. Do not YAP or over-explain.
+      3. To create or overwrite a file, use EXACTLY this XML format:
+         <file name="path/to/file.js">
+         [CODE HERE]
+         </file>
+      4. To delete a file, use EXACTLY:
+         <delete name="path/to/file.js"/>
+      `;
 
       const result = await generateAIResponse(
         selectedModel.provider, selectedModel.id, 
-        `WORKSPACE CONTEXT:\n${workspaceContext}\n\nACTIVE FILE: ${activeFile?.name}\n${code}\n\nUSER REQUEST: ${userMsg}`, 
+        `WORKSPACE:\n${workspaceContext}\n\nACTIVE FILE: ${activeFile?.name}\n${code}\n\nREQUEST: ${userMsg}`, 
         systemPrompt, apiKey
       );
       
       let displayMessage = result;
       let actionCount = 0;
 
-      // 1. Parse Deletions
-      const deleteRegex = /@@@FILE-DELETE:\s*([^\n]+)/g;
+      // Parse Deletes
+      const deleteRegex = /<delete name="([^"]+)"\s*\/>/gi;
       let delMatch;
       while ((delMatch = deleteRegex.exec(result)) !== null) {
         await deleteProjectFile(`${currentDir}/${delMatch[1].trim()}`, false).catch(()=>null);
@@ -128,14 +112,16 @@ export const useIdeLogic = () => {
         actionCount++;
       }
 
-      // 2. Parse Writes/Creations
-      const writeRegex = /@@@FILE-WRITE:\s*([^\n]+)\n([\s\S]*?)@@@END-FILE/g;
+      // Parse Writes (XML Format)
+      const writeRegex = /<file name="([^"]+)">([\s\S]*?)<\/file>/gi;
       let writeMatch;
       while ((writeMatch = writeRegex.exec(result)) !== null) {
         const filePath = writeMatch[1].trim();
-        const fileContent = writeMatch[2].trim();
+        let fileContent = writeMatch[2].trim();
         
-        // Auto-create directories if the AI specifies a deep path
+        // Strip nested markdown if the AI accidentally adds it inside the XML
+        fileContent = fileContent.replace(/^```[a-zA-Z]*\n/, "").replace(/```$/, "").trim();
+
         const parts = filePath.split("/");
         if (parts.length > 1) {
           const dirPath = parts.slice(0, -1).join("/");
@@ -143,18 +129,14 @@ export const useIdeLogic = () => {
         }
 
         await saveFileContent(`${currentDir}/${filePath}`, fileContent);
-        
-        // If the AI overwrote the file you are currently looking at, update the editor!
         if (activeFile && filePath.endsWith(activeFile.name)) setCode(fileContent);
 
         displayMessage = displayMessage.replace(writeMatch[0], "");
         actionCount++;
       }
 
-      // 3. Strip annoying Markdown (**) from the remaining message
       displayMessage = displayMessage.replace(/\*\*/g, "").trim();
-      
-      if (displayMessage.length === 0 && actionCount > 0) displayMessage = `Done! I executed ${actionCount} file actions.`;
+      if (displayMessage.length === 0 && actionCount > 0) displayMessage = `Executed ${actionCount} file operations successfully.`;
 
       setChatHistory(prev => [...prev, { role: "ai", content: displayMessage }]);
       if (actionCount > 0) { readProjectFiles(currentDir).then(setFiles); addToast(`AI executed ${actionCount} tasks!`, "success"); }
@@ -165,15 +147,39 @@ export const useIdeLogic = () => {
     } finally { setIsAiThinking(false); }
   };
 
-  // ... (Keep startLiveServer, runCode, handleGitCommand from previous)
-  const handleGitCommand = async (action: string) => { /* omitted for brevity, keep previous */ };
-  const startLiveServer = async () => { /* omitted for brevity, keep previous */ };
-  const runCode = async () => { /* omitted for brevity, keep previous */ };
+  const handleGitCommand = async (action: string) => { /* keeping git simple */ };
+  
+  const startLiveServer = async () => {
+    setTerminalOutput(prev => prev + "\n> Starting localhost on port 3000...\n");
+    try {
+      await spawnLiveServer(currentDir, 3000);
+      await openInBrowser("http://localhost:3000");
+      addToast("Live Server Started", "success");
+    } catch (e: any) {
+      setTerminalOutput(prev => prev + `Error: ${e}\n`);
+      addToast("Failed to start server", "error");
+    }
+  };
+
+  const runCode = async () => {
+    if (!activeFile) return;
+    let cmd = ""; let args = [activeFile.name];
+    if (activeFile.name.endsWith(".js")) cmd = "node";
+    else if (activeFile.name.endsWith(".py")) cmd = "python";
+    else if (activeFile.name.endsWith(".php")) cmd = "php";
+    else if (activeFile.name.endsWith(".ts")) cmd = "npx ts-node";
+    else if (activeFile.name.endsWith(".sh")) cmd = "bash";
+    else { addToast("Unsupported file type", "error"); return; }
+
+    if (settings.useWsl) { args = [cmd, activeFile.name]; cmd = "wsl"; }
+    const out = await runTerminalCommand(cmd, args, currentDir);
+    setTerminalOutput(prev => prev + `\n> ${cmd} ${args.join(" ")}\n` + out);
+  };
 
   return {
     currentDir, setCurrentDir, files, activeFile, code, setCode,
     activeTab, setActiveTab, terminalOutput, setTerminalOutput, runCode, startLiveServer,
-    showSettings, setShowSettings, settings, setSettings, toasts, addToast, refreshModels, // Exported refreshModels!
+    showSettings, setShowSettings, settings, setSettings, toasts, addToast, refreshModels,
     chatInput, setChatInput, chatHistory, isAiThinking, availableModels, selectedModel, setSelectedModel,
     handleFileClick, handleSaveFile, handleNewFile, handleAskAi, handleOpenFolder, handleDelete, handleGitCommand
   };

@@ -48,23 +48,18 @@ function App() {
     return exts;
   }, [ide.activeFile?.name]);
 
-  // --- FIXED: Seamless Model Installer ---
   const installModel = async (m: string) => {
-    ide.setTerminalOutput(prev => prev + `\n> Downloading ${m} in background... This may take a few minutes depending on your internet.\n`);
+    ide.setTerminalOutput(prev => prev + `\n> Downloading ${m} in background... This may take a few minutes.\n`);
     ide.addToast(`Downloading ${m}...`, "info");
     try { 
       await pullNewModel(m); 
-      ide.setTerminalOutput(prev => prev + `✅ ${m} installed perfectly! Loading into IDE...\n`);
-      await ide.refreshModels(); // Instantly reloads the dropdown!
+      ide.setTerminalOutput(prev => prev + `✅ ${m} installed perfectly!\n`);
+      await ide.refreshModels(); 
       ide.addToast(`${m} installed successfully!`, "success");
     } 
-    catch(e) { 
-      ide.setTerminalOutput(prev => prev + `❌ Failed to install ${m}.\n`);
-      ide.addToast(`Download failed for ${m}`, "error");
-    }
+    catch(e) { ide.addToast(`Download failed for ${m}`, "error"); }
   };
 
-  // Filter files in sidebar
   const filteredFiles = ide.files.filter(f => f.name.toLowerCase().includes(fileFilter.toLowerCase()));
 
   return (
@@ -73,14 +68,56 @@ function App() {
         {ide.toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.message}</div>)}
       </div>
 
+      {/* RESTORED FULL VS CODE MENU */}
       <div className="top-menu-bar">
         <div className="menu-group">
           <img src="/tauri.svg" alt="logo" className="menu-logo" />
           <div className="menu-item has-dropdown">File
-            <div className="dropdown"><div onClick={() => ide.handleNewFile(ide.currentDir)}>New File</div><div onClick={ide.handleOpenFolder}>Open Folder...</div><div onClick={ide.handleSaveFile}>Save (Ctrl+S)</div></div>
+            <div className="dropdown">
+              <div onClick={() => ide.handleNewFile(ide.currentDir)}>New File</div>
+              <div onClick={() => createProjectFolder(`${ide.currentDir}/NewFolder`)}>New Folder</div>
+              <div onClick={ide.handleOpenFolder}>Open Folder...</div>
+              <div onClick={ide.handleSaveFile}>Save (Ctrl+S)</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Edit
+            <div className="dropdown">
+              <div>Undo (Ctrl+Z)</div>
+              <div>Redo (Ctrl+Y)</div>
+              <div>Copy (Ctrl+C)</div>
+              <div>Paste (Ctrl+V)</div>
+              <div>Find (Ctrl+F)</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Selection
+            <div className="dropdown">
+              <div>Select All (Ctrl+A)</div>
+              <div>Expand Selection</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">View
+            <div className="dropdown">
+              <div onClick={() => ide.setActiveTab("editor")}>Editor</div>
+              <div onClick={() => ide.setActiveTab("preview")}>Live Preview</div>
+              <div onClick={() => ide.setShowSettings(true)}>Settings</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Go
+            <div className="dropdown"><div>Go to File...</div><div>Go to Line...</div></div>
           </div>
           <div className="menu-item has-dropdown">Run
-            <div className="dropdown"><div onClick={ide.runCode}>Execute Active File</div><div onClick={ide.startLiveServer}>Go Live (Localhost)</div></div>
+            <div className="dropdown">
+              <div onClick={ide.runCode}>Run Active File</div>
+              <div onClick={ide.startLiveServer}>Go Live (Localhost:3000)</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Terminal
+            <div className="dropdown">
+              <div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Help
+            <div className="dropdown"><div>Documentation</div><div>About Godly IDE</div></div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -126,7 +163,6 @@ function App() {
               <button onClick={() => createProjectFolder(`${ide.currentDir}/NewFolder`).then(() => readProjectFiles(ide.currentDir).then(ide.setCurrentDir))}>📁</button>
             </div>
           </div>
-          {/* Missing Tool: Global File Filter */}
           <div style={{padding: "5px 10px"}}>
              <input type="text" placeholder="Search files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)} style={{width: "100%", background: "#1e1e1e", border: "1px solid #333", color: "white", padding: "4px", fontSize: "11px", borderRadius: "3px"}}/>
           </div>
@@ -136,7 +172,7 @@ function App() {
         <main className="main-content">
           <header className="editor-header">
             <div className="tabs"><div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>{ide.activeFile?.name || "Code"}</div><div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Iframe Preview</div></div>
-            <div className="editor-actions"><button className="text-btn outline" onClick={ide.runCode}>▶ Run</button></div>
+            <div className="editor-actions"><button className="text-btn outline" onClick={ide.runCode}>▶ Run Code</button></div>
           </header>
 
           <div className="editor-workspace">
@@ -153,12 +189,13 @@ function App() {
           </div>
           <div className="chat-history">
             {ide.chatHistory.map((msg, idx) => <div key={idx} className={`chat-message ${msg.role}`}>{msg.content}</div>)}
-            {ide.isAiThinking && <div className="chat-message system">Analyzing Workspace & Altering Files...</div>}
+            {ide.isAiThinking && <div className="chat-message system">Analyzing Workspace & Executing...</div>}
             <div ref={chatEndRef} />
           </div>
           <div className="chat-input-area">
-            <textarea placeholder="Tell AI to alter files..." value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
-            <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Send command</button>
+            <textarea placeholder="Tell AI to alter files... (Ctrl+Enter to send)" value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
+            <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Send Command</button>
+            <div style={{fontSize: "9px", color: "#666", textAlign: "center", marginTop: "5px"}}>Notice: For research purposes. AI may alter files directly.</div>
           </div>
         </aside>
       </div>
