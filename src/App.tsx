@@ -39,11 +39,15 @@ function App() {
   useEffect(() => { const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 50); }, [ide.chatHistory, ide.isAiThinking]);
 
+  // FIXED: Safely check if a file is active before reading its extension
   const editorExtensions = useMemo(() => {
     const exts = [search({ top: true })]; 
-    if (ide.activeFile?.name.endsWith(".html")) exts.push(html());
-    else if (ide.activeFile?.name.endsWith(".css")) exts.push(css());
+    const fileName = ide.activeFile?.name || "";
+    
+    if (fileName.endsWith(".html")) exts.push(html());
+    else if (fileName.endsWith(".css")) exts.push(css());
     else exts.push(javascript({ jsx: true, typescript: true }));
+    
     return exts;
   }, [ide.activeFile?.name]);
 
@@ -55,7 +59,6 @@ function App() {
 
   return (
     <div className={`ide-wrapper theme-${ide.settings.theme}`}>
-      {/* VS Code Toasts */}
       <div className="toast-container">
         {ide.toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.message}</div>)}
       </div>
@@ -66,8 +69,24 @@ function App() {
           <div className="menu-item has-dropdown">File
             <div className="dropdown"><div onClick={() => ide.handleNewFile(ide.currentDir)}>New File</div><div onClick={ide.handleOpenFolder}>Open Folder...</div><div onClick={ide.handleSaveFile}>Save (Ctrl+S)</div></div>
           </div>
+          <div className="menu-item has-dropdown">Git
+            <div className="dropdown">
+              <div onClick={() => ide.handleGitCommand("status")}>Status</div>
+              <div onClick={() => ide.handleGitCommand("add")}>Add All</div>
+              <div onClick={() => ide.handleGitCommand("commit")}>Commit...</div>
+              <div onClick={() => ide.handleGitCommand("pull")}>Pull</div>
+              <div onClick={() => ide.handleGitCommand("push")}>Push</div>
+            </div>
+          </div>
           <div className="menu-item has-dropdown">Run
-            <div className="dropdown"><div onClick={ide.runCode}>Run Active File</div><div onClick={ide.startLiveServer}>Go Live (Localhost)</div></div>
+            <div className="dropdown">
+              <div onClick={ide.runCode}>Execute Active File {ide.settings.useWsl ? "(WSL)" : ""}</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Terminal
+            <div className="dropdown">
+              <div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div>
+            </div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -130,7 +149,7 @@ function App() {
 
         <aside className="ai-panel">
           <div className="panel-header"><span>AI Chat</span>
-            <select className="model-selector" value={ide.selectedModel.id} onChange={(e) => ide.setSelectedModel(ide.availableModels.find(m => m.id === e.target.value)!)}>
+            <select className="model-selector" value={ide.selectedModel?.id || ""} onChange={(e) => ide.setSelectedModel(ide.availableModels.find(m => m.id === e.target.value)!)}>
               {ide.availableModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
