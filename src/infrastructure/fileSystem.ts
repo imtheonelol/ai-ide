@@ -7,7 +7,12 @@ export const readProjectFiles = async (path: string): Promise<FileEntry[]> => { 
 export const readFileContent = async (path: string): Promise<string> => { try { return await invoke("read_file", { path }); } catch (e) { return ""; } };
 export const saveFileContent = async (path: string, contents: string): Promise<void> => { await invoke("write_file", { path, contents }); };
 export const createProjectFolder = async (path: string): Promise<void> => { await invoke("create_folder", { path }); };
-export const deleteProjectFile = async (path: string, is_dir: boolean): Promise<void> => { await invoke("delete_path", { path, is_dir }); };
+
+// --- FIXED: Passing both snake_case and camelCase to bypass Tauri serialization bugs ---
+export const deleteProjectFile = async (path: string, is_dir: boolean): Promise<void> => { 
+  await invoke("delete_path", { path, isDir: is_dir, is_dir: is_dir }); 
+};
+
 export const openNativeFolderPicker = async (): Promise<string | null> => { const selected = await open({ directory: true, multiple: false }); return selected as string | null; };
 export const runTerminalCommand = async (cmd: string, args: string[], dir: string): Promise<string> => { try { return await invoke("run_command", { cmd, args, dir }); } catch (e) { return String(e); } };
 export const spawnLiveServer = async (dir: string, port: number): Promise<string> => { return await invoke("spawn_server", { dir, port }); };

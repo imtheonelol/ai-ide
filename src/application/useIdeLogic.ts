@@ -48,12 +48,23 @@ export const useIdeLogic = () => {
 
   const handleOpenFolder = async () => { const newPath = await openNativeFolderPicker(); if (newPath) { setCurrentDir(newPath); setActiveFile(null); setCode(""); addToast("Workspace loaded", "success"); } };
   const handleFileClick = async (file: FileEntry) => { if (!file.is_dir) { const content = await readFileContent(file.path); setActiveFile(file); setCode(content); setActiveTab("editor"); } };
-  const handleDelete = async (file: FileEntry) => { if (confirm(`Delete ${file.name}?`)) { await deleteProjectFile(file.path, file.is_dir); if (activeFile?.path === file.path) { setActiveFile(null); setCode(""); } readProjectFiles(currentDir).then(setFiles); addToast(`Deleted ${file.name}`); } };
+  
+  // --- FIXED: Robust error handling for deletions ---
+  const handleDelete = async (file: FileEntry) => { 
+    if (confirm(`Are you sure you want to permanently delete ${file.name}?`)) { 
+      try {
+        await deleteProjectFile(file.path, file.is_dir); 
+        if (activeFile?.path === file.path) { setActiveFile(null); setCode(""); } 
+        readProjectFiles(currentDir).then(setFiles); 
+        addToast(`Deleted ${file.name}`, "success"); 
+      } catch (err: any) {
+        addToast(`Failed to delete: ${err}`, "error");
+      }
+    } 
+  };
+  
   const handleSaveFile = async () => { if (activeFile) { await saveFileContent(activeFile.path, code); addToast("File saved", "success"); } };
-  
   const handleNewFile = async (targetDir: string = currentDir) => { const fileName = prompt("File name:"); if (fileName) { await saveFileContent(`${targetDir}/${fileName}`, ""); readProjectFiles(currentDir).then(setFiles); } };
-  
-  // FIX: Dedicated folder handler prevents passing an array back to the React String State!
   const handleNewFolder = async (targetDir: string = currentDir) => { const folderName = prompt("Folder name:"); if (folderName) { await createProjectFolder(`${targetDir}/${folderName}`); readProjectFiles(currentDir).then(setFiles); } };
 
   const handleTerminalCommand = async (input: string) => {

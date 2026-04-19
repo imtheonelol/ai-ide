@@ -11,10 +11,10 @@ import { toPng } from 'html-to-image';
 import { useIdeLogic } from "./application/useIdeLogic";
 import { pullNewModel } from "./infrastructure/aiService";
 import { FileEntry } from "./domain/types";
-import { readProjectFiles } from "./infrastructure/fileSystem";
+import { readProjectFiles, createProjectFolder } from "./infrastructure/fileSystem";
 import "./App.css";
 
-// FIX: Added onContextMenu prop to handle right clicks natively in React!
+// --- FIXED: Native ContextMenu propagation ---
 const FileTreeNode = ({ file, ide, paddingLeft, onContextMenu }: { file: FileEntry, ide: any, paddingLeft: number, onContextMenu: (e: React.MouseEvent, f: FileEntry) => void }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [children, setChildren] = useState<FileEntry[]>([]);
@@ -85,7 +85,6 @@ function App() {
   const [fileFilter, setFileFilter] = useState("");
   const [termInput, setTermInput] = useState("");
   
-  // Right Click Context Menu State
   const [contextMenu, setContextMenu] = useState<{x: number, y: number, file: FileEntry} | null>(null);
 
   const [taskName, setTaskName] = useState("DailyBackup");
@@ -120,7 +119,7 @@ function App() {
   };
 
   const handleContextMenu = (e: React.MouseEvent, file: FileEntry) => {
-    e.preventDefault();
+    e.preventDefault(); e.stopPropagation();
     setContextMenu({ x: e.pageX, y: e.pageY, file });
   };
 
@@ -137,10 +136,11 @@ function App() {
     <div className={`ide-wrapper theme-${ide.settings.theme}`} onClick={() => setContextMenu(null)}>
       <div className="toast-container">{ide.toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.message}</div>)}</div>
 
-      {/* CUSTOM RIGHT-CLICK CONTEXT MENU */}
+      {/* --- FIXED: Context Menu Race Condition --- */}
       {contextMenu && (
-        <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }}>
-          <div onClick={() => ide.handleDelete(contextMenu.file)}>🗑️ Delete {contextMenu.file.name}</div>
+        <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
+          <div onClick={() => { ide.handleDelete(contextMenu.file); setContextMenu(null); }}>🗑️ Delete {contextMenu.file.name}</div>
+          <div onClick={() => setContextMenu(null)} style={{color: '#888'}}>❌ Cancel</div>
         </div>
       )}
 
@@ -172,7 +172,7 @@ function App() {
             <div className="dropdown"><div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div><div onClick={() => ide.setShowTaskModal(true)}>Background Task Scheduler</div></div>
           </div>
           <div className="menu-item has-dropdown">Help
-            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v4.0 - Uncompromising Architecture.")}>About</div></div>
+            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v5.0 - Uncompromising Architecture.")}>About</div></div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -271,7 +271,6 @@ function App() {
                 <div className="sidebar-header"><span>Explorer</span>
                   <div className="sidebar-actions">
                     <button onClick={() => ide.handleNewFile(ide.currentDir)}>+</button>
-                    {/* FIX: Handled the folder creation correctly without crashing React path strings */}
                     <button onClick={() => ide.handleNewFolder(ide.currentDir)}>📁</button>
                   </div>
                 </div>
