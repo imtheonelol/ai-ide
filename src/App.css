@@ -1,45 +1,54 @@
 :root {
-  --bg-dark: #1e1e1e;
-  --bg-panel: #252526;
-  --bg-sidebar: #333333;
-  --text-main: #cccccc;
-  --text-muted: #858585;
+  --bg-base: #181818;
+  --bg-panel: #202020;
+  --bg-sidebar: #1e1e1e;
+  --bg-header: #2b2b2b;
+  --text-main: #e0e0e0;
+  --text-muted: #969696;
   --accent: #007acc;
   --accent-hover: #005f9e;
-  --border: #3c3c3c;
-  --error: #f48771;
+  --border: #333333;
+  --error: #f14c4c;
+  --success: #89d185;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: var(--bg-dark);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-base);
   color: var(--text-main);
   overflow: hidden;
 }
+
+/* Custom Scrollbars to look like VS Code */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #464646; border-radius: 5px; border: 2px solid var(--bg-panel); }
+::-webkit-scrollbar-thumb:hover { background: #555; }
 
 .ide-container {
   display: flex;
   height: 100vh;
   width: 100vw;
+  transition: all 0.3s ease;
 }
 
-/* Sidebar */
+/* --- SIDEBAR --- */
 .sidebar {
   width: 250px;
-  background-color: var(--bg-panel);
+  background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  transition: width 0.3s ease;
 }
 
 .sidebar-header {
-  padding: 15px;
+  padding: 12px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 1px;
@@ -47,161 +56,110 @@ body {
   text-transform: uppercase;
 }
 
-.file-list {
-  flex-grow: 1;
-  overflow-y: auto;
+.sidebar-actions button {
+  background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 2px 5px; border-radius: 3px;
 }
+.sidebar-actions button:hover { background: rgba(255,255,255,0.1); color: white; }
+
+.current-path {
+  padding: 0 15px 10px; font-size: 11px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.file-list { flex-grow: 1; overflow-y: auto; padding-bottom: 10px; }
 
 .file-item {
-  padding: 8px 15px;
-  font-size: 13px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background 0.2s;
+  padding: 6px 15px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; transition: background 0.1s;
 }
+.file-item:hover { background-color: #2a2d2e; }
+.file-item.active { background-color: #37373d; color: #ffffff; }
 
-.file-item:hover {
-  background-color: #2a2d2e;
-}
-
-.file-item.active {
-  background-color: #37373d;
-  color: #ffffff;
-}
-
-/* Editor Area */
+/* --- EDITOR AREA --- */
 .editor-area {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  background-color: var(--bg-dark);
+  flex-grow: 1; display: flex; flex-direction: column; background-color: var(--bg-base); min-width: 0;
 }
 
 .editor-header {
-  height: 45px;
-  background-color: var(--bg-dark);
-  display: flex;
-  align-items: flex-end;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--border);
+  height: 40px; background-color: var(--bg-header); display: flex; align-items: center; justify-content: space-between; padding-right: 15px;
 }
 
 .editor-tab {
-  background-color: var(--bg-dark);
-  color: #fff;
-  padding: 10px 20px;
-  font-size: 13px;
-  border-top: 2px solid var(--accent);
-  cursor: pointer;
+  background-color: var(--bg-base); color: #fff; height: 100%; padding: 0 20px; display: flex; align-items: center; font-size: 13px; border-top: 2px solid var(--accent); border-right: 1px solid var(--border);
 }
 
-.cm-theme-dark {
-  height: calc(100vh - 45px);
-  font-size: 14px;
+.save-btn {
+  background-color: var(--accent); color: white; border: none; padding: 5px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: 0.2s;
 }
+.save-btn:hover:not(:disabled) { background-color: var(--accent-hover); }
+.save-btn:disabled { background-color: var(--border); color: var(--text-muted); cursor: not-allowed; }
 
-/* AI Panel */
+.cm-theme-dark { height: calc(100vh - 40px); font-size: 14px; }
+
+/* --- AI PANEL --- */
 .ai-panel {
-  width: 350px;
-  background-color: var(--bg-panel);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+  width: 380px; background-color: var(--bg-panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; box-shadow: -5px 0 15px rgba(0,0,0,0.2);
 }
 
 .panel-header {
-  height: 45px;
-  display: flex;
-  align-items: center;
-  padding: 0 15px;
-  font-size: 12px;
-  font-weight: bold;
-  border-bottom: 1px solid var(--border);
-  color: #fff;
+  height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; font-size: 12px; font-weight: bold; border-bottom: 1px solid var(--border); background-color: var(--bg-header);
 }
 
 .chat-history {
-  flex-grow: 1;
-  padding: 15px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+  flex-grow: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth;
 }
 
 .chat-message {
-  font-size: 13px;
-  line-height: 1.5;
-  padding: 10px;
-  border-radius: 6px;
-  max-width: 90%;
-  white-space: pre-wrap;
+  font-size: 13px; line-height: 1.5; padding: 12px; border-radius: 8px; max-width: 92%; white-space: pre-wrap; word-wrap: break-word; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .chat-message.user {
-  background-color: var(--accent);
-  color: white;
-  align-self: flex-end;
+  background-color: var(--accent); color: white; align-self: flex-end; border-bottom-right-radius: 0;
 }
 
 .chat-message.ai {
-  background-color: var(--bg-sidebar);
-  color: #e0e0e0;
-  align-self: flex-start;
-  border: 1px solid var(--border);
+  background-color: var(--bg-base); color: #e0e0e0; align-self: flex-start; border: 1px solid var(--border); border-bottom-left-radius: 0;
+}
+
+.chat-message.error {
+  background-color: rgba(241, 76, 76, 0.1); color: var(--error); border: 1px solid var(--error);
 }
 
 .chat-input-area {
-  padding: 15px;
-  border-top: 1px solid var(--border);
-  background-color: var(--bg-panel);
+  padding: 15px; border-top: 1px solid var(--border); background-color: var(--bg-panel);
 }
 
 .chat-input-area textarea {
-  width: 100%;
-  height: 80px;
-  background-color: #3c3c3c;
-  color: white;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 10px;
-  font-family: inherit;
-  font-size: 13px;
-  resize: none;
-  outline: none;
+  width: 100%; height: 80px; background-color: var(--bg-base); color: white; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: inherit; font-size: 13px; resize: none; outline: none; transition: border-color 0.2s;
 }
-
-.chat-input-area textarea:focus {
-  border-color: var(--accent);
-}
+.chat-input-area textarea:focus { border-color: var(--accent); }
 
 .chat-input-area button {
-  width: 100%;
-  margin-top: 10px;
-  background-color: var(--accent);
-  color: white;
-  border: none;
-  padding: 10px;
-  cursor: pointer;
+  width: 100%; margin-top: 10px; background-color: var(--accent); color: white; border: none; padding: 10px; cursor: pointer; border-radius: 6px; font-weight: 600; font-size: 13px; transition: background 0.2s;
+}
+.chat-input-area button:hover:not(:disabled) { background-color: var(--accent-hover); }
+.chat-input-area button:disabled { background-color: var(--border); color: var(--text-muted); cursor: not-allowed; }
+
+/* --- RESPONSIVE DESIGN --- */
+@media (max-width: 900px) {
+  .ide-container { flex-direction: column; }
+  .sidebar { width: 100%; height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+  .ai-panel { width: 100%; height: 350px; border-left: none; border-top: 1px solid var(--border); }
+  .cm-theme-dark { height: calc(100vh - 40px - 200px - 350px); }
+}
+/* Keep all previous CSS I sent you, and just add these two blocks at the bottom: */
+
+.model-selector {
+  background-color: var(--bg-base);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  font-weight: 600;
-  transition: background 0.2s;
+  padding: 3px 5px;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
 }
+.model-selector:hover { border-color: var(--accent); color: white; }
 
-.chat-input-area button:hover:not(:disabled) {
-  background-color: var(--accent-hover);
+.chat-message pre {
+  background: #111; padding: 10px; border-radius: 4px; overflow-x: auto; margin-top: 5px;
 }
-
-.chat-input-area button:disabled {
-  background-color: var(--text-muted);
-  cursor: not-allowed;
-}
-
-.error-text {
-  color: var(--error);
-  font-size: 12px;
-  margin-top: 5px;
-  text-align: center;
-}
+.chat-message code { font-family: monospace; font-size: 12px; }

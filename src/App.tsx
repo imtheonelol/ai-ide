@@ -1,120 +1,88 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
-import { generateAIResponse } from "./infrastructure/aiService";
+import { html } from "@codemirror/lang-html";
+import { css } from "@codemirror/lang-css";
+import { useIdeLogic } from "../application/useIdeLogic";
+import { SUPPORTED_MODELS } from "../domain/types";
 import "./App.css";
 
-interface ChatMessage {
-  role: "user" | "ai";
-  content: string;
-}
-
 function App() {
-  const [code, setCode] = useState("// Welcome to your Godly Local AI IDE\n// Start coding here...\n");
-  const [chatInput, setChatInput] = useState("");
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
-    { role: "ai", content: "Hello! I am your local AI assistant. How can I help you build today?" }
-  ]);
-  const [isAiThinking, setIsAiThinking] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  
+  const ide = useIdeLogic();
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom of chat when new messages appear
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory]);
+  useEffect(() => ide.chatEndRef?.current?.scrollIntoView({ behavior: "smooth" }), [ide.chatHistory]);
+  useEffect(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), [ide.chatHistory]);
 
-  const handleAskAi = async () => {
-    if (!chatInput.trim()) return;
-
-    const userMessage = chatInput;
-    setChatInput("");
-    setErrorMsg("");
-    setChatHistory(prev => [...prev, { role: "user", content: userMessage }]);
-    setIsAiThinking(true);
-
-    try {
-      const result = await generateAIResponse({
-        model: "qwen2.5-coder:1.5b", // Make sure you ran: ollama run qwen2.5-coder:1.5b
-        prompt: `Here is the current code:\n\`\`\`javascript\n${code}\n\`\`\`\n\nUser Request: ${userMessage}`,
-        system: "You are an expert 10x developer AI. Answer the user's questions clearly. If you provide code, wrap it in standard markdown code blocks (e.g. ```javascript )."
-      });
-
-      setChatHistory(prev => [...prev, { role: "ai", content: result }]);
-
-      // AI Auto-apply code logic: If the AI returns a code block, apply it to the editor
-      if (result.includes("```javascript")) {
-        const extractedCode = result.split("```javascript")[1].split("```")[0].trim();
-        setCode(extractedCode);
-        setChatHistory(prev => [...prev, { role: "ai", content: "✨ I have automatically applied the updated code to your editor." }]);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg("Failed to connect to AI. Ensure Ollama is running and CORS is configured.");
-    } finally {
-      setIsAiThinking(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleAskAi();
-    }
+  // Dynamically choose syntax highlighting based on file extension
+  const getExtensions = () => {
+    if (ide.activeFile?.name.endsWith(".html")) return [html()];
+    if (ide.activeFile?.name.endsWith(".css")) return [css()];
+    return [javascript({ jsx: true, typescript: true })]; // Default to JS/TS/React
   };
 
   return (
     <div className="ide-container">
-      {/* Sidebar */}
+      {/* SIDEBAR */}
       <nav className="sidebar">
-        <div className="sidebar-header">Explorer</div>
+        <div className="sidebar-header">
+          <span>EXPLORER</span>
+          <div className="sidebar-actions">
+            <button onClick={ide.handleNewFile} title="New File">📄+</button>
+            <button onClick={() => ide.setCurrentDir(".")} title="Root">🏠</button>
+          </div>
+        </div>
+        <div className="current-path">{ide.currentDir}</div>
         <div className="file-list">
-          <div className="file-item active">📄 main.js</div>
-          <div className="file-item">📄 index.html</div>
-          <div className="file-item">🎨 styles.css</div>
+          {ide.files.map((f, i) => (
+            <div key={i} className={`file-item ${ide.activeFile?.path === f.path ? "active" : ""}`} onClick={() => ide.handleFileClick(f)}>
+              <span style={{ fontSize: '16px' }}>{f.is_dir ? "📁" : "📄"}</span> {f.name}
+            </div>
+          ))}
         </div>
       </nav>
 
-      {/* Editor Area */}
+      {/* EDITOR */}
       <main className="editor-area">
         <header className="editor-header">
-          <div className="editor-tab">main.js</div>
+          <div className="editor-tab">{ide.activeFile ? ide.activeFile.name : "Welcome"}</div>
+          <button className="save-btn" onClick={ide.handleSaveFile} disabled={!ide.activeFile}>💾 Save</button>
         </header>
         <CodeMirror
-          value={code}
+          value={ide.code}
           theme="dark"
-          extensions={[javascript({ jsx: true, typescript: true })]}
-          onChange={(val) => setCode(val)}
+          extensions={getExtensions()}
+          onChange={(val) => ide.setCode(val)}
         />
       </main>
 
-      {/* AI Chat Right Panel */}
+      {/* AI PANEL */}
       <aside className="ai-panel">
-        <div className="panel-header">Bolt.ai Assistant</div>
+        <div className="panel-header">
+          <span>AI Assistant</span>
+          <select 
+            className="model-selector" 
+            value={ide.selectedModel} 
+            onChange={(e) => ide.setSelectedModel(e.target.value)}
+          >
+            {SUPPORTED_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
         <div className="chat-history">
-          {chatHistory.map((msg, idx) => (
-            <div key={idx} className={`chat-message ${msg.role}`}>
-              {msg.content}
-            </div>
+          {ide.chatHistory.map((msg, idx) => (
+            <div key={idx} className={`chat-message ${msg.role}`}>{msg.content}</div>
           ))}
-          {isAiThinking && (
-            <div className="chat-message ai">AI is thinking...</div>
-          )}
+          {ide.isAiThinking && <div className="chat-message ai">Generating... ⏳</div>}
           <div ref={chatEndRef} />
         </div>
         <div className="chat-input-area">
           <textarea 
-            placeholder="Ask AI to fix or generate code... (Press Enter to send)" 
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isAiThinking}
+            placeholder="Ask AI to write React, HTML, or CSS..." 
+            value={ide.chatInput}
+            onChange={(e) => ide.setChatInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ide.handleAskAi(); } }}
           />
-          {errorMsg && <div className="error-text">{errorMsg}</div>}
-          <button onClick={handleAskAi} disabled={isAiThinking || !chatInput.trim()}>
-            {isAiThinking ? "Generating..." : "Send"}
-          </button>
+          <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Submit</button>
         </div>
       </aside>
     </div>
