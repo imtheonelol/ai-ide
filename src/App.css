@@ -123,3 +123,10 @@ body { background-color: var(--bg-base); color: var(--text-main); overflow: hidd
 .theme-light .top-menu-bar { background-color: #dddddd; color: #333; }
 .theme-light .cm-theme-dark { background-color: white; color: black; }
 .theme-light .terminal-panel { background-color: #1e1e1e; } /* Keep terminal dark */
+
+/* VS Code Toasts */
+.toast-container { position: fixed; bottom: 30px; right: 340px; display: flex; flex-direction: column; gap: 10px; z-index: 9999; }
+.toast { background: #252526; color: white; padding: 12px 20px; border-radius: 4px; font-size: 12px; border-left: 4px solid var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.5); animation: slideIn 0.3s ease; }
+.toast.success { border-left-color: #89d185; }
+.toast.error { border-left-color: #f14c4c; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }

@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::time::Duration;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -14,17 +14,12 @@ fn list_files(path: String) -> Result<Vec<serde_json::Value>, String> {
     for entry in entries.flatten() {
         let meta = entry.metadata().unwrap();
         files.push(serde_json::json!({
-            "name": entry.file_name().to_string_lossy(),
-            "path": entry.path().to_string_lossy(),
-            "is_dir": meta.is_dir()
+            "name": entry.file_name().to_string_lossy(), "path": entry.path().to_string_lossy(), "is_dir": meta.is_dir()
         }));
     }
     files.sort_by(|a, b| {
-        let a_is_dir = a["is_dir"].as_bool().unwrap_or(false);
-        let b_is_dir = b["is_dir"].as_bool().unwrap_or(false);
-        if a_is_dir && !b_is_dir { std::cmp::Ordering::Less }
-        else if !a_is_dir && b_is_dir { std::cmp::Ordering::Greater }
-        else { a["name"].as_str().cmp(&b["name"].as_str()) }
+        let a_is_dir = a["is_dir"].as_bool().unwrap_or(false); let b_is_dir = b["is_dir"].as_bool().unwrap_or(false);
+        if a_is_dir && !b_is_dir { std::cmp::Ordering::Less } else if !a_is_dir && b_is_dir { std::cmp::Ordering::Greater } else { a["name"].as_str().cmp(&b["name"].as_str()) }
     });
     Ok(files)
 }
@@ -45,22 +40,17 @@ fn delete_path(path: String, is_dir: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn run_command(cmd: String, args: Vec<String>, dir: String) -> Result<String, String> {
-    let mut command = Command::new(cmd);
-    command.args(args).current_dir(dir);
+    let mut command = Command::new(cmd); command.args(args).current_dir(dir);
     #[cfg(target_os = "windows")] command.creation_flags(0x08000000); 
     let output = command.output().map_err(|e| format!("Command failed: {}", e))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string(); let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     if !stderr.is_empty() { Ok(format!("{}\nError:\n{}", stdout, stderr)) } else { Ok(stdout) }
 }
 
-// --- NEW: SPAWN DETACHED SERVER ---
 #[tauri::command]
 fn spawn_server(dir: String, port: u16) -> Result<String, String> {
-    // Uses Node's npx to serve the directory securely in the background
     let cmd = if cfg!(target_os = "windows") { "npx.cmd" } else { "npx" };
-    let mut command = Command::new(cmd);
-    command.args(["serve", "-p", &port.to_string()]).current_dir(dir);
+    let mut command = Command::new(cmd); command.args(["serve", "-p", &port.to_string()]).current_dir(dir);
     #[cfg(target_os = "windows")] command.creation_flags(0x08000000);
     command.spawn().map_err(|e| format!("Failed to start server: {}", e))?;
     Ok(format!("Server started on port {}", port))
@@ -80,25 +70,47 @@ async fn pull_model(model: String) -> Result<String, String> {
     Ok(format!("Successfully pulled {}", model))
 }
 
+// --- UPGRADED: Multi-Provider AI Router ---
 #[tauri::command]
-async fn generate_ai_proxy(model: String, prompt: String, system: String) -> Result<String, String> {
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(300)).build().unwrap();
-    let res = client.post("http://localhost:11434/api/generate").json(&serde_json::json!({ "model": model, "prompt": prompt, "system": system, "stream": false })).send().await.map_err(|e| format!("Network Error: ({})", e))?;
-    let status = res.status(); 
-    if !status.is_success() {
-        let error_text = res.text().await.unwrap_or_default();
-        return Err(format!("Ollama Error ({}): {}", status, error_text));
+async fn generate_ai_proxy(provider: String, model: String, prompt: String, system: String, api_key: String) -> Result<String, String> {
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(120)).build().unwrap();
+
+    if provider == "openai" {
+        let res = client.post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&serde_json::json!({ "model": model, "messages": [ {"role": "system", "content": system}, {"role": "user", "content": prompt} ] }))
+            .send().await.map_err(|e| e.to_string())?;
+        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+        if let Some(content) = json["choices"][0]["message"]["content"].as_str() { return Ok(content.to_string()); }
+        return Err(format!("OpenAI Error: {}", json));
+
+    } else if provider == "gemini" {
+        let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", model, api_key);
+        let res = client.post(&url)
+            .json(&serde_json::json!({ "system_instruction": { "parts": { "text": system } }, "contents": [{ "parts": [{"text": prompt}] }] }))
+            .send().await.map_err(|e| e.to_string())?;
+        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+        if let Some(content) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() { return Ok(content.to_string()); }
+        return Err(format!("Gemini Error: {}", json));
+
+    } else {
+        // Ollama Local
+        let res = client.post("http://localhost:11434/api/generate")
+            .json(&serde_json::json!({ "model": model, "prompt": prompt, "system": system, "stream": false }))
+            .send().await.map_err(|e| format!("Network Error: ({})", e))?;
+        if !res.status().is_success() { return Err(format!("Ollama Error: {}", res.text().await.unwrap_or_default())); }
+        let text = res.text().await.unwrap();
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(resp) = json.get("response").and_then(|v| v.as_str()) { return Ok(resp.to_string()); }
+        }
+        Ok(text)
     }
-    let text = res.text().await.map_err(|e| e.to_string())?;
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-        if let Some(resp) = json.get("response").and_then(|v| v.as_str()) { return Ok(resp.to_string()); }
-    }
-    Ok(text)
 }
 
 fn main() {
+    // FIXED: Silences the Ollama already running error!
     let mut cmd = Command::new("ollama");
-    cmd.arg("serve");
+    cmd.arg("serve").stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(target_os = "windows")] cmd.creation_flags(0x08000000); 
     let _ = cmd.spawn(); 
 
