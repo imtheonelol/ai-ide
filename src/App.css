@@ -143,3 +143,30 @@ html, body, #root { width: 100vw; height: 100vh; margin: 0; padding: 0; backgrou
 
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 @keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }
+
+/* --- BOOT SCREEN --- */
+.boot-screen { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; width: 100vw; background: #0d0d0d; color: white; user-select: none; }
+.boot-logo-container { position: relative; width: 100px; height: 100px; display: flex; justify-content: center; align-items: center; margin-bottom: 20px; }
+.boot-spinner { position: absolute; width: 100%; height: 100%; border: 3px solid transparent; border-top-color: #007acc; border-radius: 50%; animation: spin 1s linear infinite; }
+.boot-logo-image { width: 60px; height: 60px; z-index: 10; }
+.boot-title { font-size: 28px; font-weight: bold; letter-spacing: 2px; margin: 0; background: linear-gradient(90deg, #fff, #007acc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.boot-status { font-family: monospace; color: #888; margin-top: 10px; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* --- TERMINAL INPUT --- */
+.terminal-input-box { display: flex; padding: 5px 15px; border-top: 1px solid var(--border); background: #0a0a0a; }
+.terminal-input-box input { flex-grow: 1; background: transparent; border: none; color: white; font-family: monospace; font-size: 12px; outline: none; }
+
+/* --- DEPENDENCY GRAPH --- */
+.dependency-graph { padding: 30px; height: 100%; background: var(--bg-base); color: white; overflow: auto; }
+.graph-canvas { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px; }
+.graph-node { padding: 15px 25px; border-radius: 8px; font-family: monospace; font-weight: bold; border: 2px solid #444; position: relative; background: #1a1a1a; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+.html-node { border-color: #e34c26; color: #e34c26; }
+.css-node { border-color: #264de4; color: #264de4; }
+.js-node { border-color: #f0db4f; color: #f0db4f; }
+
+/* --- AI DISCLAIMER --- */
+.ai-disclaimer { font-size: 9px; color: var(--text-muted); margin-top: 5px; text-align: center; }
+
+/* --- MENUS --- */
+hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
