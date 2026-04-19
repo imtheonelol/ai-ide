@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-// WE DELETED "import './index.css'" HERE TO FIX THE WHITE SCREEN!
+import "./App.css"; // We ONLY want our Godly IDE styles
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

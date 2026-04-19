@@ -12,12 +12,10 @@
   "app": {
     "windows": [
       {
-        "title": "Godly IDE",
-        "width": 1280,
-        "height": 800,
-        "maximized": true,
-        "resizable": true,
-        "fullscreen": false
+    "title": "ai-ide",
+    "width": 1200,
+    "height": 800,
+    "backgroundColor": "rgba(30, 30, 30, 1)"
       }
     ],
     "security": {
