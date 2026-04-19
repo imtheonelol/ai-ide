@@ -35,41 +35,37 @@ function App() {
   const ide = useIdeLogic();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [time, setTime] = useState(new Date().toLocaleTimeString());
+  const [fileFilter, setFileFilter] = useState("");
 
   useEffect(() => { const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 50); }, [ide.chatHistory, ide.isAiThinking]);
 
-  // CRITICAL BUG FIX HERE: We safely check if the file exists before checking its extension
   const editorExtensions = useMemo(() => {
     const exts = [search({ top: true })]; 
-    const fileName = ide.activeFile?.name || ""; // Prevents the crash!
-    
-    if (fileName.endsWith(".html")) exts.push(html());
-    else if (fileName.endsWith(".css")) exts.push(css());
+    if (ide.activeFile?.name.endsWith(".html")) exts.push(html());
+    else if (ide.activeFile?.name.endsWith(".css")) exts.push(css());
     else exts.push(javascript({ jsx: true, typescript: true }));
     return exts;
   }, [ide.activeFile?.name]);
 
+  // --- FIXED: Seamless Model Installer ---
   const installModel = async (m: string) => {
-    ide.setTerminalOutput(prev => prev + `\n> Downloading ${m} in background...\n`);
-    try { await pullNewModel(m); ide.setTerminalOutput(prev => prev + `✅ ${m} installed! Restart IDE to see it.\n`); } 
-    catch(e) { ide.setTerminalOutput(prev => prev + `❌ Failed to install ${m}.\n`); }
+    ide.setTerminalOutput(prev => prev + `\n> Downloading ${m} in background... This may take a few minutes depending on your internet.\n`);
+    ide.addToast(`Downloading ${m}...`, "info");
+    try { 
+      await pullNewModel(m); 
+      ide.setTerminalOutput(prev => prev + `✅ ${m} installed perfectly! Loading into IDE...\n`);
+      await ide.refreshModels(); // Instantly reloads the dropdown!
+      ide.addToast(`${m} installed successfully!`, "success");
+    } 
+    catch(e) { 
+      ide.setTerminalOutput(prev => prev + `❌ Failed to install ${m}.\n`);
+      ide.addToast(`Download failed for ${m}`, "error");
+    }
   };
 
-  // --- THE NEW BOOT SCREEN ---
-  if (ide.isBooting) {
-    return (
-      <div className="boot-screen">
-        <div className="boot-logo-container">
-          <div className="boot-spinner"></div>
-          <img src="/tauri.svg" alt="Logo" className="boot-logo-image" />
-        </div>
-        <h1 className="boot-title">Godly IDE</h1>
-        <p className="boot-status">{ide.bootStatus}</p>
-        <div className="boot-bar"><div className="boot-fill"></div></div>
-      </div>
-    );
-  }
+  // Filter files in sidebar
+  const filteredFiles = ide.files.filter(f => f.name.toLowerCase().includes(fileFilter.toLowerCase()));
 
   return (
     <div className={`ide-wrapper theme-${ide.settings.theme}`}>
@@ -83,11 +79,8 @@ function App() {
           <div className="menu-item has-dropdown">File
             <div className="dropdown"><div onClick={() => ide.handleNewFile(ide.currentDir)}>New File</div><div onClick={ide.handleOpenFolder}>Open Folder...</div><div onClick={ide.handleSaveFile}>Save (Ctrl+S)</div></div>
           </div>
-          <div className="menu-item has-dropdown">Git
-            <div className="dropdown"><div onClick={() => ide.handleGitCommand("status")}>Status</div><div onClick={() => ide.handleGitCommand("add")}>Add All</div><div onClick={() => ide.handleGitCommand("commit")}>Commit...</div><div onClick={() => ide.handleGitCommand("pull")}>Pull</div><div onClick={() => ide.handleGitCommand("push")}>Push</div></div>
-          </div>
           <div className="menu-item has-dropdown">Run
-            <div className="dropdown"><div onClick={ide.runCode}>Run Active File</div><div onClick={ide.startLiveServer}>Go Live (Localhost)</div></div>
+            <div className="dropdown"><div onClick={ide.runCode}>Execute Active File</div><div onClick={ide.startLiveServer}>Go Live (Localhost)</div></div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -103,16 +96,17 @@ function App() {
                 <label><input type="checkbox" checked={ide.settings.useWsl} onChange={e => ide.setSettings({...ide.settings, useWsl: e.target.checked})} /> Run code natively in WSL (Linux)</label>
               </div>
               <div className="settings-section">
-                <h3>Cloud AI API Keys</h3>
+                <h3>Cloud AI API Keys (Optional)</h3>
                 <input type="password" placeholder="OpenAI Key (sk-...)" value={ide.settings.openAiKey} onChange={e => ide.setSettings({...ide.settings, openAiKey: e.target.value})} />
                 <input type="password" placeholder="Gemini Key (AIza...)" value={ide.settings.geminiKey} onChange={e => ide.setSettings({...ide.settings, geminiKey: e.target.value})} />
               </div>
               <div className="settings-section">
                 <h3>1-Click Local Models</h3>
                 <div style={{display: 'flex', gap: '5px', flexWrap: 'wrap'}}>
+                  <button className="text-btn outline" onClick={() => installModel('deepseek-coder:6.7b')}>DeepSeek 6.7b</button>
                   <button className="text-btn outline" onClick={() => installModel('llama3')}>Llama 3</button>
                   <button className="text-btn outline" onClick={() => installModel('mistral')}>Mistral</button>
-                  <button className="text-btn outline" onClick={() => installModel('deepseek-coder:6.7b')}>DeepSeek</button>
+                  <button className="text-btn outline" onClick={() => installModel('qwen2.5:7b')}>Qwen 7B</button>
                 </div>
               </div>
               <button className="close-btn" onClick={() => ide.setShowSettings(false)}>Close</button>
@@ -132,12 +126,16 @@ function App() {
               <button onClick={() => createProjectFolder(`${ide.currentDir}/NewFolder`).then(() => readProjectFiles(ide.currentDir).then(ide.setCurrentDir))}>📁</button>
             </div>
           </div>
-          <div className="file-list">{ide.files.map((f, i) => <FileTreeNode key={i} file={f} ide={ide} paddingLeft={15} />)}</div>
+          {/* Missing Tool: Global File Filter */}
+          <div style={{padding: "5px 10px"}}>
+             <input type="text" placeholder="Search files..." value={fileFilter} onChange={e => setFileFilter(e.target.value)} style={{width: "100%", background: "#1e1e1e", border: "1px solid #333", color: "white", padding: "4px", fontSize: "11px", borderRadius: "3px"}}/>
+          </div>
+          <div className="file-list">{filteredFiles.map((f, i) => <FileTreeNode key={i} file={f} ide={ide} paddingLeft={15} />)}</div>
         </nav>
 
         <main className="main-content">
           <header className="editor-header">
-            <div className="tabs"><div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>{ide.activeFile?.name || "Code"}</div><div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Browser Preview</div></div>
+            <div className="tabs"><div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>{ide.activeFile?.name || "Code"}</div><div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Iframe Preview</div></div>
             <div className="editor-actions"><button className="text-btn outline" onClick={ide.runCode}>▶ Run</button></div>
           </header>
 
@@ -148,24 +146,24 @@ function App() {
         </main>
 
         <aside className="ai-panel">
-          <div className="panel-header"><span>AI Setup</span>
+          <div className="panel-header"><span>Autonomous AI</span>
             <select className="model-selector" value={ide.selectedModel?.id || ""} onChange={(e) => ide.setSelectedModel(ide.availableModels.find(m => m.id === e.target.value)!)}>
               {ide.availableModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <div className="chat-history">
             {ide.chatHistory.map((msg, idx) => <div key={idx} className={`chat-message ${msg.role}`}>{msg.content}</div>)}
-            {ide.isAiThinking && <div className="chat-message system">Generating...</div>}
+            {ide.isAiThinking && <div className="chat-message system">Analyzing Workspace & Altering Files...</div>}
             <div ref={chatEndRef} />
           </div>
           <div className="chat-input-area">
-            <textarea placeholder="Ask AI to code..." value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
-            <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Send</button>
+            <textarea placeholder="Tell AI to alter files..." value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
+            <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Send command</button>
           </div>
         </aside>
       </div>
       <footer className="status-bar">
-        <div className="status-group"><div className="status-item go-live-btn" onClick={ide.startLiveServer}>📡 Go Live</div></div>
+        <div className="status-group"><div className="status-item go-live-btn" onClick={ide.startLiveServer}>📡 Go Live (Port 3000)</div></div>
         <div className="status-group"><div className="status-item">{ide.settings.useWsl ? "WSL Active" : "Windows"}</div><div className="status-item">{time}</div></div>
       </footer>
     </div>
