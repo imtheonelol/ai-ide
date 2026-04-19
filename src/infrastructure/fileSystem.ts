@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { FileEntry } from "../domain/types";
 
 export const readProjectFiles = async (path: string): Promise<FileEntry[]> => {
@@ -12,6 +13,13 @@ export const saveFileContent = async (path: string, contents: string): Promise<v
 };
 export const createProjectFolder = async (path: string): Promise<void> => {
   await invoke("create_folder", { path });
+};
+export const deleteProjectFile = async (path: string, is_dir: boolean): Promise<void> => {
+  await invoke("delete_path", { path, is_dir });
+};
+export const openNativeFolderPicker = async (): Promise<string | null> => {
+  const selected = await open({ directory: true, multiple: false });
+  return selected as string | null;
 };
 export const runTerminalCommand = async (cmd: string, args: string[], dir: string): Promise<string> => {
   try { return await invoke("run_command", { cmd, args, dir }); } catch (e) { return String(e); }

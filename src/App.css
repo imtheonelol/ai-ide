@@ -65,3 +65,61 @@ body { background-color: var(--bg-base); color: var(--text-main); overflow: hidd
 .settings-section { margin-top: 20px; }
 .settings-section input[type="text"] { width: 100%; padding: 8px; margin: 10px 0; background: var(--bg-base); border: 1px solid var(--border); color: white; }
 .close-btn { margin-top: 20px; background: none; border: 1px solid var(--text-muted); color: white; padding: 5px 15px; cursor: pointer; }
+
+
+
+/* ADD THIS TO YOUR App.css */
+
+.ide-wrapper { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+.ide-container { display: flex; flex-grow: 1; overflow: hidden; }
+
+/* TOP MENU BAR */
+.top-menu-bar {
+  height: 30px; background-color: #1e1e1e; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-main); user-select: none;
+}
+.menu-group { display: flex; align-items: center; height: 100%; }
+.menu-logo { height: 16px; margin: 0 10px; }
+.menu-item { padding: 0 10px; height: 100%; display: flex; align-items: center; cursor: pointer; position: relative; }
+.menu-item:hover { background-color: rgba(255, 255, 255, 0.1); }
+.menu-title { font-size: 12px; color: var(--text-muted); pointer-events: none; }
+.menu-spacer { width: 100px; } /* Balances the title in the center */
+
+/* DROPDOWNS */
+.dropdown {
+  display: none; position: absolute; top: 100%; left: 0; background-color: #252526; 
+  border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1000; min-width: 180px; padding: 5px 0;
+}
+.menu-item.has-dropdown:hover .dropdown { display: block; }
+.dropdown div { padding: 6px 15px; font-size: 12px; color: var(--text-main); }
+.dropdown div:hover { background-color: var(--accent); color: white; }
+
+/* FILE EXPLORER DELETES */
+.file-item { display: flex; align-items: center; padding: 4px 10px; font-size: 13px; cursor: pointer; color: var(--text-muted); user-select: none; position: relative; }
+.file-name { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-delete { display: none; margin-left: 10px; color: #ff6b6b; font-size: 10px; padding: 2px 5px; background: rgba(255,0,0,0.1); border-radius: 3px; }
+.file-item:hover .file-delete { display: block; }
+.file-delete:hover { background: #ff6b6b; color: white; }
+
+/* STATUS BAR */
+.status-bar {
+  height: 22px; background-color: var(--accent); display: flex; align-items: center; justify-content: space-between;
+  padding: 0 10px; font-size: 11px; color: white; user-select: none;
+}
+.status-group { display: flex; align-items: center; gap: 15px; }
+.go-live-btn { cursor: pointer; display: flex; align-items: center; gap: 4px; transition: 0.2s; }
+.go-live-btn:hover { background-color: rgba(255,255,255,0.2); border-radius: 3px; }
+
+/* THEME: Light Mode Support */
+.theme-light {
+  --bg-base: #ffffff;
+  --bg-panel: #f3f3f3;
+  --bg-sidebar: #f3f3f3;
+  --bg-header: #ececec;
+  --text-main: #333333;
+  --text-muted: #666666;
+  --border: #cccccc;
+}
+.theme-light .top-menu-bar { background-color: #dddddd; color: #333; }
+.theme-light .cm-theme-dark { background-color: white; color: black; }
+.theme-light .terminal-panel { background-color: #1e1e1e; } /* Keep terminal dark */

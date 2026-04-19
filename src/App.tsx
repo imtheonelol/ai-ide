@@ -3,10 +3,11 @@ import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { html } from "@codemirror/lang-html";
 import { css } from "@codemirror/lang-css";
+import { search } from "@codemirror/search"; // The new Search plugin!
 import { useIdeLogic } from "./application/useIdeLogic";
 import { pullNewModel } from "./infrastructure/aiService";
 import { FileEntry } from "./domain/types";
-import { readProjectFiles } from "./infrastructure/fileSystem";
+import { readProjectFiles, createProjectFolder } from "./infrastructure/fileSystem";
 import "./App.css";
 
 const FileTreeNode = ({ file, ide, paddingLeft }: { file: FileEntry, ide: any, paddingLeft: number }) => {
@@ -15,20 +16,17 @@ const FileTreeNode = ({ file, ide, paddingLeft }: { file: FileEntry, ide: any, p
 
   const toggleOpen = async () => {
     if (file.is_dir) {
-      if (!isOpen) {
-        const subFiles = await readProjectFiles(file.path);
-        setChildren(subFiles);
-      }
+      if (!isOpen) { const subFiles = await readProjectFiles(file.path); setChildren(subFiles); }
       setIsOpen(!isOpen);
-    } else {
-      ide.handleFileClick(file);
-    }
+    } else ide.handleFileClick(file);
   };
 
   return (
     <div>
-      <div className={`file-item ${ide.activeFile?.path === file.path ? "active" : ""}`} style={{ paddingLeft: `${paddingLeft}px` }} onClick={toggleOpen}>
-        <span className="file-icon">{file.is_dir ? (isOpen ? "v" : ">") : "≡"}</span> {file.name}
+      <div className={`file-item ${ide.activeFile?.path === file.path ? "active" : ""}`} style={{ paddingLeft: `${paddingLeft}px` }}>
+        <span className="file-icon" onClick={toggleOpen}>{file.is_dir ? (isOpen ? "v" : ">") : "≡"}</span> 
+        <span className="file-name" onClick={toggleOpen}>{file.name}</span>
+        <span className="file-delete" onClick={() => ide.handleDelete(file)}>✕</span>
       </div>
       {isOpen && children.map((child, i) => <FileTreeNode key={i} file={child} ide={ide} paddingLeft={paddingLeft + 15} />)}
     </div>
@@ -39,107 +37,152 @@ function App() {
   const ide = useIdeLogic();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [newModelName, setNewModelName] = useState("");
+  const [time, setTime] = useState(new Date().toLocaleTimeString());
 
+  // Clock tick
+  useEffect(() => { const timer = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 50); }, [ide.chatHistory, ide.isAiThinking]);
 
+  // Editor Extensions with built-in Ctrl+F Search
   const editorExtensions = useMemo(() => {
-    if (ide.activeFile?.name.endsWith(".html")) return [html()];
-    if (ide.activeFile?.name.endsWith(".css")) return [css()];
-    return [javascript({ jsx: true, typescript: true })];
+    const exts = [search({ top: true })]; // Adds Ctrl+F Search Bar to top of editor!
+    if (ide.activeFile?.name.endsWith(".html")) exts.push(html());
+    else if (ide.activeFile?.name.endsWith(".css")) exts.push(css());
+    else exts.push(javascript({ jsx: true, typescript: true }));
+    return exts;
   }, [ide.activeFile?.name]);
 
-  const handlePullModel = async () => {
-    if(!newModelName) return;
-    alert(`Pulling ${newModelName} in background. This will take a few minutes.`);
-    try { await pullNewModel(newModelName); alert(`${newModelName} installed! Restart IDE to see it.`); } 
-    catch(e) { alert("Failed to pull model."); }
-  };
-
   return (
-    <div className="ide-container">
-      {/* Settings Modal */}
-      {ide.showSettings && (
-        <div className="modal-overlay" onClick={() => ide.setShowSettings(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2>IDE Settings</h2>
-            <div className="settings-section">
-              <label><input type="checkbox" checked={ide.settings.autoSaveAI} onChange={e => ide.setSettings({...ide.settings, autoSaveAI: e.target.checked})} /> Auto-save AI files to /ai_generated</label>
+    <div className={`ide-wrapper theme-${ide.settings.theme}`}>
+      {/* TOP MENU BAR (VS Code Style) */}
+      <div className="top-menu-bar">
+        <div className="menu-group">
+          <img src="/tauri.svg" alt="logo" className="menu-logo" />
+          <div className="menu-item has-dropdown">File
+            <div className="dropdown">
+              <div onClick={() => ide.handleNewFile(ide.currentDir)}>New File</div>
+              <div onClick={ide.handleOpenFolder}>Open Folder...</div>
+              <div onClick={ide.handleSaveFile}>Save (Ctrl+S)</div>
             </div>
-            <div className="settings-section">
-              <h3>Download New Model</h3>
-              <input type="text" placeholder="e.g. llama3, phi3" value={newModelName} onChange={e => setNewModelName(e.target.value)} />
-              <button onClick={handlePullModel}>Download</button>
+          </div>
+          <div className="menu-item has-dropdown">Edit
+            <div className="dropdown">
+              <div>Undo (Ctrl+Z)</div>
+              <div>Redo (Ctrl+Y)</div>
+              <div>Find (Ctrl+F)</div>
             </div>
-            <button className="close-btn" onClick={() => ide.setShowSettings(false)}>Close</button>
+          </div>
+          <div className="menu-item has-dropdown">Run
+            <div className="dropdown">
+              <div onClick={ide.runCode}>Run Active File</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Terminal
+            <div className="dropdown">
+              <div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div>
+            </div>
+          </div>
+          <div className="menu-item has-dropdown">Help
+            <div className="dropdown"><div>About Godly IDE</div></div>
           </div>
         </div>
-      )}
-
-      {/* ACTIVITY BAR */}
-      <div className="activity-bar">
-        <div className="activity-icon active" title="Explorer">Files</div>
-        <div className="activity-icon" title="Settings" onClick={() => ide.setShowSettings(true)}>Settings</div>
+        <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div>
+        <div className="menu-spacer"></div>
       </div>
 
-      {/* SIDEBAR EXPLORER */}
-      <nav className="sidebar">
-        <div className="sidebar-header">
-          <span>Explorer</span>
-          <div className="sidebar-actions">
-            <button onClick={() => ide.handleNewFile(ide.currentDir)}>+</button>
+      <div className="ide-container">
+        {/* Settings Modal (Unchanged from previous) */}
+        {ide.showSettings && (
+          <div className="modal-overlay" onClick={() => ide.setShowSettings(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <h2>IDE Settings</h2>
+              <div className="settings-section">
+                <label>Theme: 
+                  <select value={ide.settings.theme} onChange={e => ide.setSettings({...ide.settings, theme: e.target.value as any})}>
+                    <option value="dark">VS Dark</option><option value="light">VS Light</option>
+                  </select>
+                </label><br/><br/>
+                <label><input type="checkbox" checked={ide.settings.autoSaveAI} onChange={e => ide.setSettings({...ide.settings, autoSaveAI: e.target.checked})} /> Auto-save AI files</label>
+              </div>
+              <button className="close-btn" onClick={() => ide.setShowSettings(false)}>Close</button>
+            </div>
           </div>
-        </div>
-        <div className="file-list">
-          {ide.files.map((f, i) => <FileTreeNode key={i} file={f} ide={ide} paddingLeft={15} />)}
-        </div>
-      </nav>
+        )}
 
-      {/* MAIN EDITOR & TERMINAL */}
-      <main className="main-content">
-        <header className="editor-header">
-          <div className="tabs">
-            <div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>Code</div>
-            <div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Live Preview</div>
+        <div className="activity-bar">
+          <div className="activity-icon active" title="Explorer">Files</div>
+          <div className="activity-icon" title="Settings" onClick={() => ide.setShowSettings(true)}>Settings</div>
+        </div>
+
+        <nav className="sidebar">
+          <div className="sidebar-header">
+            <span>Explorer</span>
+            <div className="sidebar-actions">
+              <button onClick={() => ide.handleNewFile(ide.currentDir)} title="New File">+</button>
+              <button onClick={() => createProjectFolder(`${ide.currentDir}/NewFolder`).then(() => readProjectFiles(ide.currentDir).then(ide.setCurrentDir))} title="New Folder">📁</button>
+            </div>
           </div>
-          <div className="editor-actions">
-            <button className="text-btn" onClick={ide.runCode}>Run Node</button>
-            <button className="text-btn primary" onClick={ide.handleSaveFile}>Save</button>
+          <div className="file-list">
+            {ide.files.map((f, i) => <FileTreeNode key={i} file={f} ide={ide} paddingLeft={15} />)}
           </div>
-        </header>
+        </nav>
 
-        <div className="editor-workspace">
-          {ide.activeTab === "editor" ? (
-            <CodeMirror value={ide.code} theme="dark" extensions={editorExtensions} onChange={(val) => ide.setCode(val)} onKeyDown={(e) => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); ide.handleSaveFile(); }}} />
-          ) : (
-            <iframe className="preview-frame" srcDoc={ide.code} title="Live Preview" sandbox="allow-scripts allow-same-origin" />
-          )}
-        </div>
+        <main className="main-content">
+          <header className="editor-header">
+            <div className="tabs">
+              <div className={`tab ${ide.activeTab === "editor" ? "active" : ""}`} onClick={() => ide.setActiveTab("editor")}>{ide.activeFile?.name || "Code"}</div>
+              <div className={`tab ${ide.activeTab === "preview" ? "active" : ""}`} onClick={() => ide.setActiveTab("preview")}>Live Preview</div>
+            </div>
+            <div className="editor-actions">
+              <button className="text-btn outline" onClick={ide.runCode}>▶ Run Code</button>
+            </div>
+          </header>
 
-        {/* TERMINAL PANEL */}
-        <div className="terminal-panel">
-          <div className="terminal-header">Terminal Output</div>
-          <pre className="terminal-output">{ide.terminalOutput}</pre>
-        </div>
-      </main>
+          <div className="editor-workspace">
+            {ide.activeTab === "editor" ? (
+              <CodeMirror value={ide.code} theme={ide.settings.theme} extensions={editorExtensions} onChange={(val) => ide.setCode(val)} onKeyDown={(e) => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); ide.handleSaveFile(); }}} />
+            ) : (
+              <iframe className="preview-frame" srcDoc={ide.code} title="Live Preview" sandbox="allow-scripts allow-same-origin" />
+            )}
+          </div>
 
-      {/* AI PANEL */}
-      <aside className="ai-panel">
-        <div className="panel-header">
-          <span>AI Config</span>
-          <select className="model-selector" value={ide.selectedModel} onChange={(e) => ide.setSelectedModel(e.target.value)}>
-            {ide.availableModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <div className="terminal-panel">
+            <div className="terminal-header">Terminal Output</div>
+            <pre className="terminal-output">{ide.terminalOutput}</pre>
+          </div>
+        </main>
+
+        <aside className="ai-panel">
+          <div className="panel-header">
+            <span>AI Config</span>
+            <select className="model-selector" value={ide.selectedModel} onChange={(e) => ide.setSelectedModel(e.target.value)}>
+              {ide.availableModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div className="chat-history">
+            {ide.chatHistory.map((msg, idx) => <div key={idx} className={`chat-message ${msg.role}`}>{msg.content}</div>)}
+            {ide.isAiThinking && <div className="chat-message system">Generating...</div>}
+            <div ref={chatEndRef} />
+          </div>
+          <div className="chat-input-area">
+            <textarea placeholder="Ask AI..." value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
+            <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Submit</button>
+          </div>
+        </aside>
+      </div>
+
+      {/* STATUS BAR WITH TIME, THEME, AND GO LIVE */}
+      <footer className="status-bar">
+        <div className="status-group">
+          <div className="status-item go-live-btn" onClick={() => ide.setActiveTab("preview")}>📡 Go Live</div>
+          <div className="status-item error">❌ 0  ⚠️ 0</div>
         </div>
-        <div className="chat-history">
-          {ide.chatHistory.map((msg, idx) => <div key={idx} className={`chat-message ${msg.role}`}>{msg.content}</div>)}
-          {ide.isAiThinking && <div className="chat-message system">Generating...</div>}
-          <div ref={chatEndRef} />
+        <div className="status-group">
+          <div className="status-item">{ide.activeFile ? `Editing: ${ide.activeFile.name}` : "Idle"}</div>
+          <div className="status-item">UTF-8</div>
+          <div className="status-item">{time}</div>
         </div>
-        <div className="chat-input-area">
-          <textarea placeholder="Ask AI..." value={ide.chatInput} onChange={(e) => ide.setChatInput(e.target.value)} onKeyDown={(e) => { if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); ide.handleAskAi(); } }} />
-          <button onClick={ide.handleAskAi} disabled={ide.isAiThinking || !ide.chatInput.trim()}>Submit</button>
-        </div>
-      </aside>
+      </footer>
     </div>
   );
 }
