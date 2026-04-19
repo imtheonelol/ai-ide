@@ -14,3 +14,7 @@ export const readFileContent = async (path: string): Promise<string> => {
 export const saveFileContent = async (path: string, contents: string): Promise<void> => {
   await invoke("write_file", { path, contents });
 };
+
+export const createProjectFolder = async (path: string): Promise<void> => {
+  await invoke("create_folder", { path });
+};

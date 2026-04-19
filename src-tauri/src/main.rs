@@ -2,6 +2,10 @@
 
 use std::fs;
 use std::time::Duration;
+use std::process::Command;
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 #[tauri::command]
 fn list_files(path: String) -> Result<Vec<serde_json::Value>, String> {
@@ -17,7 +21,6 @@ fn list_files(path: String) -> Result<Vec<serde_json::Value>, String> {
         }));
     }
     
-    // Sort Folders first, then files
     files.sort_by(|a, b| {
         let a_is_dir = a["is_dir"].as_bool().unwrap_or(false);
         let b_is_dir = b["is_dir"].as_bool().unwrap_or(false);
@@ -39,11 +42,15 @@ fn write_file(path: String, contents: String) -> Result<(), String> {
     fs::write(path, contents).map_err(|e| e.to_string())
 }
 
-// Fixed the AI Proxy to use localhost and increased the timeout threshold
+#[tauri::command]
+fn create_folder(path: String) -> Result<(), String> {
+    fs::create_dir_all(path).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn generate_ai_proxy(model: String, prompt: String, system: String) -> Result<String, String> {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(300)) // Give the AI up to 5 minutes to generate long code
+        .timeout(Duration::from_secs(300))
         .build()
         .map_err(|e| format!("Failed to build client: {}", e))?;
 
@@ -56,10 +63,12 @@ async fn generate_ai_proxy(model: String, prompt: String, system: String) -> Res
         }))
         .send()
         .await
-        .map_err(|e| format!("Network Connection Error: Ensure Ollama is running. ({})", e))?;
+        .map_err(|e| format!("Network Error: Is Ollama installed? ({})", e))?;
 
     if !res.status().is_success() {
-        return Err(format!("Ollama returned an error code: {}", res.status()));
+        let error_text = res.text().await.unwrap_or_default();
+        // This will catch the 404 and tell you exactly what model is missing
+        return Err(format!("Ollama Error ({}): {}", res.status(), error_text));
     }
 
     let text = res.text().await.map_err(|e| e.to_string())?;
@@ -72,10 +81,19 @@ async fn generate_ai_proxy(model: String, prompt: String, system: String) -> Res
 }
 
 fn main() {
+    // --- AUTO-START OLLAMA SILENTLY ---
+    let mut cmd = Command::new("ollama");
+    cmd.arg("serve");
+    
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW (Hides the black terminal box)
+
+    let _ = cmd.spawn(); // Spawns in background. If already running, it just safely fails.
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            list_files, read_file, write_file, generate_ai_proxy
+            list_files, read_file, write_file, create_folder, generate_ai_proxy
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,32 +1,27 @@
 import { useState, useEffect } from "react";
 import { FileEntry, ChatMessage, SUPPORTED_MODELS } from "../domain/types";
-import { readProjectFiles, readFileContent, saveFileContent } from "../infrastructure/fileSystem";
+import { readProjectFiles, readFileContent, saveFileContent, createProjectFolder } from "../infrastructure/fileSystem";
 import { generateAIResponse } from "../infrastructure/aiService";
 
 export const useIdeLogic = () => {
-  // File System State
-  const [currentDir, setCurrentDir] = useState("./src");
+  const [currentDir, setCurrentDir] = useState("./");
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [activeFile, setActiveFile] = useState<FileEntry | null>(null);
-  const [code, setCode] = useState("// Welcome to your Godly Web IDE.\n// Select a file to start.");
+  const [code, setCode] = useState("// Welcome to your Godly IDE.\n// Select a file to start.");
 
-  // AI & Chat State
   const [selectedModel, setSelectedModel] = useState(SUPPORTED_MODELS[0].id);
   const [chatInput, setChatInput] = useState("");
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
-    { role: "ai", content: "⚡ Bolt Local is online. What web app are we building today?" }
+    { role: "ai", content: "⚡ Bolt IDE is online. Ollama should be running in the background automatically." }
   ]);
 
-  // Load files automatically
   useEffect(() => {
     readProjectFiles(currentDir).then(setFiles);
   }, [currentDir]);
 
   const handleFileClick = async (file: FileEntry) => {
-    if (file.is_dir) {
-      setCurrentDir(file.path);
-    } else {
+    if (!file.is_dir) {
       const content = await readFileContent(file.path);
       setActiveFile(file);
       setCode(content);
@@ -36,14 +31,22 @@ export const useIdeLogic = () => {
   const handleSaveFile = async () => {
     if (activeFile) {
       await saveFileContent(activeFile.path, code);
+      // We DO NOT reload the file here, which preserves Ctrl+Z and cursor position!
     }
   };
 
-  const handleNewFile = async () => {
-    const fileName = prompt("Enter new file name (e.g., index.html, App.tsx):");
+  const handleNewFile = async (targetDir: string = currentDir) => {
+    const fileName = prompt("Enter new file name (e.g., style.css):");
     if (fileName) {
-      const newPath = `${currentDir}/${fileName}`;
-      await saveFileContent(newPath, "// New file\n");
+      await saveFileContent(`${targetDir}/${fileName}`, "");
+      readProjectFiles(currentDir).then(setFiles);
+    }
+  };
+
+  const handleNewFolder = async (targetDir: string = currentDir) => {
+    const folderName = prompt("Enter new folder name:");
+    if (folderName) {
+      await createProjectFolder(`${targetDir}/${folderName}`);
       readProjectFiles(currentDir).then(setFiles);
     }
   };
@@ -59,18 +62,17 @@ export const useIdeLogic = () => {
       const result = await generateAIResponse(
         selectedModel,
         `File: ${activeFile?.name || 'None'}\nCode:\n\`\`\`\n${code}\n\`\`\`\nRequest: ${userMsg}`,
-        "You are an expert Web Developer AI. Write clean code. Wrap modifications in standard markdown code blocks."
+        "You are an expert developer AI. Provide clean code. Wrap modifications in markdown code blocks."
       );
-
       setChatHistory(prev => [...prev, { role: "ai", content: result }]);
       
-      // Auto-apply code if the AI generated a code block
       const match = result.match(/```[a-z]*\n([\s\S]*?)```/);
       if (match && match[1]) {
         setCode(match[1].trim());
-        setChatHistory(prev => [...prev, { role: "ai", content: "✨ I've applied the updated code to your editor." }]);
+        setChatHistory(prev => [...prev, { role: "ai", content: "✨ Code applied to editor." }]);
       }
     } catch (err: any) {
+      // This will display the exact 404 message from Rust
       setChatHistory(prev => [...prev, { role: "error", content: err.message }]);
     } finally {
       setIsAiThinking(false);
@@ -80,6 +82,6 @@ export const useIdeLogic = () => {
   return {
     currentDir, setCurrentDir, files, activeFile, code, setCode,
     chatInput, setChatInput, chatHistory, isAiThinking, selectedModel, setSelectedModel,
-    handleFileClick, handleSaveFile, handleNewFile, handleAskAi
+    handleFileClick, handleSaveFile, handleNewFile, handleNewFolder, handleAskAi
   };
 };
