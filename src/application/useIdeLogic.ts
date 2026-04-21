@@ -83,7 +83,6 @@ export const useIdeLogic = () => {
     return context;
   };
 
-  // --- FIXED: Memory System and Ironclad Markdown Parsing ---
   const handleAskAi = async () => {
     if (!chatInput.trim()) return;
     const userMsg = chatInput; setChatInput(""); setChatHistory(prev => [...prev, { role: "user", content: userMsg }]); setIsAiThinking(true);
@@ -92,12 +91,14 @@ export const useIdeLogic = () => {
       const workspaceContext = await getWorkspaceContext();
       const apiKey = selectedModel.provider === "openai" ? settings.openAiKey : settings.geminiKey;
       
+      // --- UPGRADED: STRICT SEPARATION OF CONCERNS & RESPONSIVE DESIGN ENFORCEMENT ---
       const systemPrompt = `You are a God-Tier Autonomous IDE Agent and Expert Senior UI/UX Developer. You have full memory of previous chats.
       DO NOT use markdown format (***) in your standard text explanations. Keep your chatting brief.
       
       CRITICAL DESIGN & CODING RULES:
       1. ABSOLUTELY NO BASIC DESIGNS. You must produce breathtaking, modern, premium tech-startup level UI.
-      2. RESPONSIVENESS IS MANDATORY. You MUST heavily utilize TailwindCSS via CDN (<script src="https://cdn.tailwindcss.com"></script>), along with FontAwesome and modern typography.
+      2. RESPONSIVENESS IS MANDATORY. Your design must perfectly adapt to mobile, tablet, and desktop screens using modern CSS (Flexbox/Grid) or TailwindCSS.
+      3. STRICT SEPARATION OF CONCERNS: NEVER embed CSS inside <style> tags or JavaScript inside <script> blocks within HTML files. ALWAYS use external links (e.g., <link rel="stylesheet" href="styles.css"> and <script src="script.js"></script>) and create the corresponding separate files.
       
       To WRITE files, use exactly this format (do not use XML):
       ### FILE: path/filename.ext
@@ -111,7 +112,6 @@ export const useIdeLogic = () => {
       To RUN TERMINAL COMMANDS:
       ### CMD: npm install axios`;
 
-      // Construct memory array
       const messageHistory = [
         { role: "system", content: systemPrompt },
         ...chatHistory.filter(m => m.role === "user" || m.role === "ai").map(m => ({
@@ -124,15 +124,12 @@ export const useIdeLogic = () => {
       const result = await generateAIResponse(selectedModel.provider, selectedModel.id, messageHistory, apiKey);
       let displayMessage = result; let actionCount = 0;
 
-      // 1. Commands
       const cmdRegex = /###\s*CMD:\s*([^\n]+)/g; let cmdMatch;
       while ((cmdMatch = cmdRegex.exec(result)) !== null) { handleTerminalCommand(cmdMatch[1].trim()); displayMessage = displayMessage.replace(cmdMatch[0], ""); actionCount++; }
 
-      // 2. Deletes
       const deleteRegex = /###\s*DELETE:\s*([^\n]+)/g; let delMatch;
       while ((delMatch = deleteRegex.exec(result)) !== null) { await deleteProjectFile(`${currentDir}/${delMatch[1].trim()}`, false).catch(()=>null); displayMessage = displayMessage.replace(delMatch[0], ""); actionCount++; }
 
-      // 3. Explicit Files (### FILE: filename \n ```language \n code ```)
       const writeRegex = /###\s*FILE:\s*([^\n]+)\n```[a-zA-Z]*\n([\s\S]*?)```/gi; let writeMatch;
       while ((writeMatch = writeRegex.exec(result)) !== null) {
         const filePath = writeMatch[1].trim(); const fileContent = writeMatch[2].trim();
@@ -143,7 +140,6 @@ export const useIdeLogic = () => {
         displayMessage = displayMessage.replace(writeMatch[0], `[Successfully saved ${filePath}]`); actionCount++;
       }
 
-      // 4. Fallback Markdown Extractor (If the AI forgets ### FILE:)
       const fallbackRegex = /```([a-zA-Z]*)\n([\s\S]*?)```/gi; let fallbackMatch;
       while ((fallbackMatch = fallbackRegex.exec(displayMessage)) !== null) {
         const lang = fallbackMatch[1].toLowerCase();
