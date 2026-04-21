@@ -35,7 +35,42 @@ fn create_folder(path: String) -> Result<(), String> { fs::create_dir_all(path).
 
 #[tauri::command]
 fn delete_path(path: String, is_dir: bool) -> Result<(), String> {
-    if is_dir { fs::remove_dir_all(path).map_err(|e| e.to_string()) } else { fs::remove_file(path).map_err(|e| e.to_string()) }
+    let result = if is_dir { fs::remove_dir_all(&path) } else { fs::remove_file(&path) };
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            #[cfg(target_os = "windows")]
+            {
+                let cmd = if is_dir { format!("rmdir /S /Q \"{}\"", path) } else { format!("del /F /Q \"{}\"", path) };
+                let fallback = Command::new("cmd").args(["/C", &cmd]).creation_flags(0x08000000).output();
+                if let Ok(out) = fallback { if out.status.success() { return Ok(()); } }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let cmd = format!("rm -rf \"{}\"", path);
+                let fallback = Command::new("sh").args(["-c", &cmd]).output();
+                if let Ok(out) = fallback { if out.status.success() { return Ok(()); } }
+            }
+            Err(format!("File locked by OS. Please click 'Stop Server & Unlock' to free it. ({})", e))
+        }
+    }
+}
+
+// --- NEW: Nuclear Process Killer ---
+#[tauri::command]
+fn stop_processes() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("taskkill").args(["/IM", "node.exe", "/F"]).creation_flags(0x08000000).output();
+        let _ = Command::new("taskkill").args(["/IM", "python.exe", "/F"]).creation_flags(0x08000000).output();
+        Ok("Forcefully stopped all background servers and unlocked files.".to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("killall").arg("node").output();
+        let _ = Command::new("killall").arg("python").output();
+        Ok("Forcefully stopped all background servers and unlocked files.".to_string())
+    }
 }
 
 #[tauri::command]
@@ -52,13 +87,10 @@ fn run_command(cmd: String, args: Vec<String>, dir: String) -> Result<String, St
     if !stderr.is_empty() && stdout.is_empty() { Ok(format!("Error:\n{}", stderr)) } else { Ok(format!("{}{}", stdout, stderr)) }
 }
 
-// --- UPGRADED: Multi-line Script Background Task Scheduler ---
 #[tauri::command]
 fn schedule_task(name: String, script: String, dir: String, schedule_type: String, schedule_value: String) -> Result<String, String> {
     let script_ext = if cfg!(target_os = "windows") { "bat" } else { "sh" };
     let script_path = format!("{}/.godly_task_{}.{}", dir, name, script_ext);
-    
-    // Save the multi-line script to a hidden file
     fs::write(&script_path, &script).map_err(|e| format!("Failed to save script: {}", e))?;
 
     #[cfg(target_os = "windows")]
@@ -66,23 +98,15 @@ fn schedule_task(name: String, script: String, dir: String, schedule_type: Strin
         let task_cmd = format!("cmd.exe /c \"{}\"", script_path);
         let mut command = Command::new("schtasks");
         command.args(["/create", "/tn", &format!("GodlyIDE_{}", name), "/tr", &task_cmd, "/f"]);
-
-        if schedule_type == "interval" {
-            command.args(["/sc", "MINUTE", "/mo", &schedule_value]);
-        } else {
-            command.args(["/sc", "DAILY", "/st", &schedule_value]); // Exact Time
-        }
-        
+        if schedule_type == "interval" { command.args(["/sc", "MINUTE", "/mo", &schedule_value]); } else { command.args(["/sc", "DAILY", "/st", &schedule_value]); }
         command.creation_flags(0x08000000);
         let output = command.output().map_err(|e| e.to_string())?;
-        if output.status.success() { Ok(format!("Multi-line Task '{}' scheduled successfully!", name)) } 
-        else { Err(String::from_utf8_lossy(&output.stderr).to_string()) }
+        if output.status.success() { Ok(format!("Multi-line Task '{}' scheduled successfully!", name)) } else { Err(String::from_utf8_lossy(&output.stderr).to_string()) }
     }
     
     #[cfg(not(target_os = "windows"))]
     {
-        let cron_time = if schedule_type == "interval" { format!("*/{} * * * *", schedule_value) } 
-                        else { format!("{} {} * * *", schedule_value.split(':').nth(1).unwrap(), schedule_value.split(':').nth(0).unwrap()) };
+        let cron_time = if schedule_type == "interval" { format!("*/{} * * * *", schedule_value) } else { format!("{} {} * * *", schedule_value.split(':').nth(1).unwrap(), schedule_value.split(':').nth(0).unwrap()) };
         let cron_cmd = format!("(crontab -l 2>/dev/null; echo \"{} cd {} && sh {}\") | crontab -", cron_time, dir, script_path);
         Command::new("sh").args(["-c", &cron_cmd]).output().map_err(|e| e.to_string())?;
         Ok(format!("Multi-line Task '{}' scheduled via crontab", name))
@@ -154,7 +178,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            list_files, read_file, write_file, create_folder, delete_path,
+            list_files, read_file, write_file, create_folder, delete_path, stop_processes,
             run_command, schedule_task, spawn_server, get_local_models, pull_model, generate_ai_proxy
         ])
         .run(tauri::generate_context!())

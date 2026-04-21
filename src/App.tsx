@@ -164,13 +164,18 @@ function App() {
             </div>
           </div>
           <div className="menu-item has-dropdown">Run
-            <div className="dropdown"><div onClick={ide.runCode}>Run Active File</div><div onClick={ide.startLiveServer}>Go Live (Localhost)</div></div>
+            <div className="dropdown">
+              <div onClick={ide.runCode}>Run Active File</div>
+              <div onClick={ide.startLiveServer}>Go Live (Localhost)</div>
+              {/* NEW: Stop Server Button in Menu */}
+              <hr/><div onClick={ide.stopLiveServer} style={{color: '#ff6b6b'}}>🛑 Stop Server & Unlock Files</div>
+            </div>
           </div>
           <div className="menu-item has-dropdown">Terminal
             <div className="dropdown"><div onClick={() => ide.setTerminalOutput("Console cleared.\n")}>Clear Terminal</div><div onClick={() => ide.setShowTaskModal(true)}>Background Task Scheduler</div></div>
           </div>
           <div className="menu-item has-dropdown">Help
-            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v6.0 - Ultimate Edition.")}>About</div></div>
+            <div className="dropdown"><div onClick={() => ide.setShowLicenseModal(true)}>Activation & License</div><div onClick={() => alert("Godly IDE v7.0 - Ultimate Edition.")}>About</div></div>
           </div>
         </div>
         <div className="menu-title">{ide.currentDir.split('\\').pop() || ide.currentDir} - Godly IDE</div><div className="menu-spacer"></div>
@@ -178,6 +183,7 @@ function App() {
 
       <div className="ide-container">
         
+        {/* LICENSE MODAL */}
         {ide.showLicenseModal && (
           <div className="modal-overlay" onClick={() => ide.setShowLicenseModal(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -198,6 +204,7 @@ function App() {
           </div>
         )}
 
+        {/* TASK SCHEDULER MODAL */}
         {ide.showTaskModal && (
           <div className="modal-overlay" onClick={() => ide.setShowTaskModal(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -227,6 +234,7 @@ function App() {
           </div>
         )}
 
+        {/* Settings Modal */}
         {ide.showSettings && (
           <div className="modal-overlay" onClick={() => ide.setShowSettings(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -241,12 +249,11 @@ function App() {
                 <input type="password" placeholder="Gemini Key" value={ide.settings.geminiKey} onChange={e => ide.setSettings({...ide.settings, geminiKey: e.target.value})} />
               </div>
               <div className="settings-section">
-                {/* UPGRADED: Expert Coder Models */}
                 <h3>1-Click Local Models</h3>
                 <div style={{display: 'flex', gap: '5px', flexWrap: 'wrap'}}>
-                  <button className="text-btn outline" onClick={() => installModel('deepseek-coder-v2')}>DeepSeek Coder v2</button>
-                  <button className="text-btn outline" onClick={() => installModel('qwen2.5-coder:7b')}>Qwen2.5 Coder 7B</button>
-                  <button className="text-btn outline" onClick={() => installModel('codestral')}>Codestral</button>
+                  <button className="text-btn outline" onClick={() => installModel('deepseek-coder:6.7b')}>DeepSeek 6.7b</button>
+                  <button className="text-btn outline" onClick={() => installModel('llama3')}>Llama 3</button>
+                  <button className="text-btn outline" onClick={() => installModel('mistral')}>Mistral</button>
                 </div>
               </div>
               <button className="close-btn" onClick={() => ide.setShowSettings(false)}>Close</button>
@@ -338,7 +345,11 @@ function App() {
         )}
       </div>
       <footer className="status-bar">
-        <div className="status-group"><div className="status-item go-live-btn" onClick={ide.startLiveServer}>📡 Go Live (Port 3000)</div></div>
+        <div className="status-group">
+          <div className="status-item go-live-btn" onClick={ide.startLiveServer}>📡 Go Live</div>
+          {/* --- NEW: Direct Stop Server Button on the bottom bar --- */}
+          <div className="status-item go-live-btn" onClick={ide.stopLiveServer} style={{color: '#ff6b6b'}}>🛑 Stop Server & Unlock</div>
+        </div>
         <div className="status-group"><div className="status-item">{ide.settings.useWsl ? "WSL Active" : "Windows"}</div><div className="status-item">{time}</div></div>
       </footer>
     </div>

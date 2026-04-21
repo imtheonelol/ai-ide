@@ -28,7 +28,7 @@ export const useIdeLogic = () => {
   const [selectedModel, setSelectedModel] = useState<AIModel>(CLOUD_MODELS[0]);
   const [chatInput, setChatInput] = useState("");
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous Agent Online. Modern UI Rules Active." }]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous Agent Online. God-Tier Design Rules Active." }]);
 
   const addToast = (msg: string, type: "info" | "success" | "error" = "info") => {
     const id = Date.now(); setToasts(prev => [...prev, { id, message: msg, type }]);
@@ -97,14 +97,14 @@ export const useIdeLogic = () => {
       const workspaceContext = await getWorkspaceContext();
       const apiKey = selectedModel.provider === "openai" ? settings.openAiKey : settings.geminiKey;
       
-      // --- UPGRADED: God-Tier UI/UX Design System Prompt ---
-      const systemPrompt = `You are a God-Tier Autonomous IDE Agent and Expert UI/UX Developer. You control the user's workspace.
+      // --- AGGRESSIVE DESIGN JAILBREAK PROMPT ---
+      const systemPrompt = `You are a God-Tier Autonomous IDE Agent and Expert Senior UI/UX Developer. You control the user's workspace.
       DO NOT use markdown format (***) in your text responses.
       
-      CRITICAL DESIGN RULES:
-      - Always write modern, production-ready, and gorgeous code. 
-      - For HTML/CSS: Use mobile-first responsive design, modern Flexbox or CSS Grid, CSS variables, glassmorphism, soft box-shadows, modern fonts (sans-serif like Inter or Roboto), smooth hover transitions, and excellent padding/spacing. 
-      - NEVER write ugly, outdated, or basic tutorial-level designs. Make it look like a premium tech startup.
+      CRITICAL DESIGN & CODING RULES:
+      1. ABSOLUTELY NO BASIC DESIGNS. You must produce breathtaking, modern, premium tech-startup level UI.
+      2. RESPONSIVENESS IS MANDATORY. You MUST heavily utilize TailwindCSS via CDN (<script src="https://cdn.tailwindcss.com"></script>), along with FontAwesome and Google Fonts for beautiful typography and icons.
+      3. NEVER use an "ai_generated" folder. ALWAYS write files directly to the root path requested (e.g., path="index.html").
       
       To WRITE files, use exactly: <file action="write" path="filename.ext">content</file>
       To DELETE files: <file action="delete" path="filename.ext"></file>
