@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { FileEntry, ChatMessage, AIModel, AppSettings, CLOUD_MODELS, Toast } from "../domain/types";
-import { readProjectFiles, readFileContent, saveFileContent, createProjectFolder, deleteProjectFile, openNativeFolderPicker, runTerminalCommand, spawnLiveServer, openInBrowser, scheduleBackgroundTask } from "../infrastructure/fileSystem";
+import { readProjectFiles, readFileContent, saveFileContent, createProjectFolder, deleteProjectFile, openNativeFolderPicker, runTerminalCommand, spawnLiveServer, openInBrowser, scheduleBackgroundTask, killAllBackgroundProcesses } from "../infrastructure/fileSystem";
 import { generateAIResponse, getLocalModels } from "../infrastructure/aiService";
 
 export const useIdeLogic = () => {
@@ -28,7 +28,7 @@ export const useIdeLogic = () => {
   const [selectedModel, setSelectedModel] = useState<AIModel>(CLOUD_MODELS[0]);
   const [chatInput, setChatInput] = useState("");
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous Agent Online. God-Tier Design Rules Active." }]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([{ role: "system", content: "⚡ Autonomous Agent Online. Memory & High Accuracy Active." }]);
 
   const addToast = (msg: string, type: "info" | "success" | "error" = "info") => {
     const id = Date.now(); setToasts(prev => [...prev, { id, message: msg, type }]);
@@ -51,14 +51,8 @@ export const useIdeLogic = () => {
   
   const handleDelete = async (file: FileEntry) => { 
     if (confirm(`Are you sure you want to permanently delete ${file.name}?`)) { 
-      try {
-        await deleteProjectFile(file.path, file.is_dir); 
-        if (activeFile?.path === file.path) { setActiveFile(null); setCode(""); } 
-        readProjectFiles(currentDir).then(setFiles); 
-        addToast(`Deleted ${file.name}`, "success"); 
-      } catch (err: any) {
-        addToast(`Failed to delete: ${err}`, "error");
-      }
+      try { await deleteProjectFile(file.path, file.is_dir); if (activeFile?.path === file.path) { setActiveFile(null); setCode(""); } readProjectFiles(currentDir).then(setFiles); addToast(`Deleted ${file.name}`, "success"); } 
+      catch (err: any) { addToast(`Failed to delete: ${err}`, "error"); }
     } 
   };
   
@@ -89,6 +83,7 @@ export const useIdeLogic = () => {
     return context;
   };
 
+  // --- FIXED: Memory System and Ironclad Markdown Parsing ---
   const handleAskAi = async () => {
     if (!chatInput.trim()) return;
     const userMsg = chatInput; setChatInput(""); setChatHistory(prev => [...prev, { role: "user", content: userMsg }]); setIsAiThinking(true);
@@ -97,40 +92,70 @@ export const useIdeLogic = () => {
       const workspaceContext = await getWorkspaceContext();
       const apiKey = selectedModel.provider === "openai" ? settings.openAiKey : settings.geminiKey;
       
-      // --- AGGRESSIVE DESIGN JAILBREAK PROMPT ---
-      const systemPrompt = `You are a God-Tier Autonomous IDE Agent and Expert Senior UI/UX Developer. You control the user's workspace.
-      DO NOT use markdown format (***) in your text responses.
+      const systemPrompt = `You are a God-Tier Autonomous IDE Agent and Expert Senior UI/UX Developer. You have full memory of previous chats.
+      DO NOT use markdown format (***) in your standard text explanations. Keep your chatting brief.
       
       CRITICAL DESIGN & CODING RULES:
       1. ABSOLUTELY NO BASIC DESIGNS. You must produce breathtaking, modern, premium tech-startup level UI.
-      2. RESPONSIVENESS IS MANDATORY. You MUST heavily utilize TailwindCSS via CDN (<script src="https://cdn.tailwindcss.com"></script>), along with FontAwesome and Google Fonts for beautiful typography and icons.
-      3. NEVER use an "ai_generated" folder. ALWAYS write files directly to the root path requested (e.g., path="index.html").
+      2. RESPONSIVENESS IS MANDATORY. You MUST heavily utilize TailwindCSS via CDN (<script src="https://cdn.tailwindcss.com"></script>), along with FontAwesome and modern typography.
       
-      To WRITE files, use exactly: <file action="write" path="filename.ext">content</file>
-      To DELETE files: <file action="delete" path="filename.ext"></file>
-      To RUN TERMINAL COMMANDS: <cmd>npm install axios</cmd>`;
+      To WRITE files, use exactly this format (do not use XML):
+      ### FILE: path/filename.ext
+      \`\`\`html
+      // Code goes here
+      \`\`\`
+      
+      To DELETE files:
+      ### DELETE: path/filename.ext
+      
+      To RUN TERMINAL COMMANDS:
+      ### CMD: npm install axios`;
 
-      const result = await generateAIResponse(selectedModel.provider, selectedModel.id, `WORKSPACE:\n${workspaceContext}\n\nACTIVE FILE: ${activeFile?.name}\n${code}\n\nREQUEST: ${userMsg}`, systemPrompt, apiKey);
+      // Construct memory array
+      const messageHistory = [
+        { role: "system", content: systemPrompt },
+        ...chatHistory.filter(m => m.role === "user" || m.role === "ai").map(m => ({
+          role: m.role === "ai" ? "assistant" : "user",
+          content: m.content
+        })),
+        { role: "user", content: `WORKSPACE CONTEXT:\n${workspaceContext}\n\nACTIVE FILE: ${activeFile?.name || "None"}\n${code}\n\nNEW REQUEST: ${userMsg}` }
+      ];
+
+      const result = await generateAIResponse(selectedModel.provider, selectedModel.id, messageHistory, apiKey);
       let displayMessage = result; let actionCount = 0;
 
-      const cmdRegex = /<cmd>([\s\S]*?)<\/cmd>/g; let cmdMatch;
+      // 1. Commands
+      const cmdRegex = /###\s*CMD:\s*([^\n]+)/g; let cmdMatch;
       while ((cmdMatch = cmdRegex.exec(result)) !== null) { handleTerminalCommand(cmdMatch[1].trim()); displayMessage = displayMessage.replace(cmdMatch[0], ""); actionCount++; }
 
-      const deleteRegex = /<file[^>]*action="delete"[^>]*path="([^"]+)"[^>]*>[\s\S]*?<\/file>/g; let delMatch;
+      // 2. Deletes
+      const deleteRegex = /###\s*DELETE:\s*([^\n]+)/g; let delMatch;
       while ((delMatch = deleteRegex.exec(result)) !== null) { await deleteProjectFile(`${currentDir}/${delMatch[1].trim()}`, false).catch(()=>null); displayMessage = displayMessage.replace(delMatch[0], ""); actionCount++; }
 
-      const writeRegex = /<file[^>]*action="write"[^>]*path="([^"]+)"[^>]*>([\s\S]*?)<\/file>/g; let writeMatch;
+      // 3. Explicit Files (### FILE: filename \n ```language \n code ```)
+      const writeRegex = /###\s*FILE:\s*([^\n]+)\n```[a-zA-Z]*\n([\s\S]*?)```/gi; let writeMatch;
       while ((writeMatch = writeRegex.exec(result)) !== null) {
         const filePath = writeMatch[1].trim(); const fileContent = writeMatch[2].trim();
         const parts = filePath.split("/");
         if (parts.length > 1) { await createProjectFolder(`${currentDir}/${parts.slice(0, -1).join("/")}`); }
         await saveFileContent(`${currentDir}/${filePath}`, fileContent);
         if (activeFile && filePath.endsWith(activeFile.name)) setCode(fileContent);
-        displayMessage = displayMessage.replace(writeMatch[0], ""); actionCount++;
+        displayMessage = displayMessage.replace(writeMatch[0], `[Successfully saved ${filePath}]`); actionCount++;
       }
 
-      displayMessage = displayMessage.replace(/\*\*/g, "").replace(/```[\s\S]*?```/g, "[Code Extracted & Applied]").trim();
-      if (displayMessage.length === 0 && actionCount > 0) displayMessage = `Done! Executed ${actionCount} tasks perfectly.`;
+      // 4. Fallback Markdown Extractor (If the AI forgets ### FILE:)
+      const fallbackRegex = /```([a-zA-Z]*)\n([\s\S]*?)```/gi; let fallbackMatch;
+      while ((fallbackMatch = fallbackRegex.exec(displayMessage)) !== null) {
+        const lang = fallbackMatch[1].toLowerCase();
+        const extMap: Record<string, string> = { javascript: "js", html: "html", css: "css", python: "py", typescript: "ts", rust: "rs", json: "json" };
+        const ext = extMap[lang] || "txt";
+        const fallbackName = `generated_${Date.now()}.${ext}`;
+        await saveFileContent(`${currentDir}/${fallbackName}`, fallbackMatch[2].trim());
+        displayMessage = displayMessage.replace(fallbackMatch[0], `[Successfully saved raw block to ${fallbackName}]`); actionCount++;
+      }
+
+      displayMessage = displayMessage.trim();
+      if (displayMessage.length === 0 && actionCount > 0) displayMessage = `Executed ${actionCount} tasks perfectly based on my memory.`;
 
       setChatHistory(prev => [...prev, { role: "ai", content: displayMessage }]);
       if (actionCount > 0) { readProjectFiles(currentDir).then(setFiles); addToast(`AI executed ${actionCount} tasks!`, "success"); }
@@ -144,6 +169,11 @@ export const useIdeLogic = () => {
   };
 
   const startLiveServer = async () => { try { await spawnLiveServer(currentDir, 3000); await openInBrowser("http://localhost:3000"); addToast("Live Server Started", "success"); } catch (e) { addToast("Failed to start server", "error"); } };
+  
+  const stopLiveServer = async () => {
+    try { const res = await killAllBackgroundProcesses(); addToast(res, "success"); } 
+    catch (e) { addToast("Failed to kill processes.", "error"); }
+  };
 
   const runCode = async () => {
     if (!activeFile) return;
@@ -174,7 +204,7 @@ export const useIdeLogic = () => {
 
   return {
     isBooting, currentDir, setCurrentDir, files, activeFile, code, setCode,
-    activeTab, setActiveTab, activeSidebar, setActiveSidebar, terminalOutput, setTerminalOutput, handleTerminalCommand, runCode, startLiveServer,
+    activeTab, setActiveTab, activeSidebar, setActiveSidebar, terminalOutput, setTerminalOutput, handleTerminalCommand, runCode, startLiveServer, stopLiveServer,
     showSettings, setShowSettings, showTaskModal, setShowTaskModal, showLicenseModal, setShowLicenseModal, scheduleTask, settings, setSettings, toggleView, toasts, addToast, refreshModels, generateLegalFiles,
     chatInput, setChatInput, chatHistory, isAiThinking, availableModels, selectedModel, setSelectedModel,
     handleFileClick, handleSaveFile, handleNewFile, handleNewFolder, handleAskAi, handleOpenFolder, handleDelete

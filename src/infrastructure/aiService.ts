@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { AIModel } from "../domain/types";
 
-export const generateAIResponse = async (provider: string, model: string, prompt: string, system: string, apiKey: string): Promise<string> => {
-  try { return await invoke<string>("generate_ai_proxy", { provider, model, prompt, system, apiKey }); } 
+// FIXED: Passing an array of messages to enable full conversation memory
+export const generateAIResponse = async (provider: string, model: string, messages: any[], apiKey: string): Promise<string> => {
+  try { return await invoke<string>("generate_ai_proxy", { provider, model, messages, apiKey }); } 
   catch (error) { throw new Error(String(error)); }
 };
 

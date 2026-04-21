@@ -56,7 +56,6 @@ fn delete_path(path: String, is_dir: bool) -> Result<(), String> {
     }
 }
 
-// --- NEW: Nuclear Process Killer ---
 #[tauri::command]
 fn stop_processes() -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -145,25 +144,56 @@ async fn pull_model(model: String) -> Result<String, String> {
     Ok(format!("Successfully pulled {}", model))
 }
 
+// --- UPGRADED: Memory & Context Integration ---
 #[tauri::command]
-async fn generate_ai_proxy(provider: String, model: String, prompt: String, system: String, api_key: String) -> Result<String, String> {
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(120)).build().unwrap();
+async fn generate_ai_proxy(provider: String, model: String, messages: Vec<serde_json::Value>, api_key: String) -> Result<String, String> {
+    // 5 Minute timeout to allow complex, high-accuracy generation
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(300)).build().unwrap();
+
     if provider == "openai" {
-        let res = client.post("https://api.openai.com/v1/chat/completions").header("Authorization", format!("Bearer {}", api_key)).json(&serde_json::json!({ "model": model, "messages": [ {"role": "system", "content": system}, {"role": "user", "content": prompt} ] })).send().await.map_err(|e| e.to_string())?;
+        let res = client.post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .json(&serde_json::json!({ "model": model, "messages": messages, "temperature": 0.1 }))
+            .send().await.map_err(|e| e.to_string())?;
         let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
         if let Some(content) = json["choices"][0]["message"]["content"].as_str() { return Ok(content.to_string()); }
         return Err(format!("OpenAI Error: {}", json));
     } else if provider == "gemini" {
+        let mut system_text = String::new();
+        let mut gemini_contents = Vec::new();
+        for msg in &messages {
+            let role = msg["role"].as_str().unwrap_or("user");
+            let content = msg["content"].as_str().unwrap_or("");
+            if role == "system" { system_text = content.to_string(); } 
+            else {
+                let gemini_role = if role == "assistant" { "model" } else { "user" };
+                gemini_contents.push(serde_json::json!({ "role": gemini_role, "parts": [{"text": content}] }));
+            }
+        }
         let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", model, api_key);
-        let res = client.post(&url).json(&serde_json::json!({ "system_instruction": { "parts": { "text": system } }, "contents": [{ "parts": [{"text": prompt}] }] })).send().await.map_err(|e| e.to_string())?;
+        let res = client.post(&url).json(&serde_json::json!({ "system_instruction": { "parts": { "text": system_text } }, "contents": gemini_contents, "generationConfig": { "temperature": 0.1 } }))
+            .send().await.map_err(|e| e.to_string())?;
         let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
         if let Some(content) = json["candidates"][0]["content"]["parts"][0]["text"].as_str() { return Ok(content.to_string()); }
         return Err(format!("Gemini Error: {}", json));
     } else {
-        let res = client.post("http://localhost:11434/api/generate").json(&serde_json::json!({ "model": model, "prompt": prompt, "system": system, "stream": false })).send().await.map_err(|e| format!("Network Error: ({})", e))?;
+        // Ollama Local Chat API (Massive Memory context)
+        let res = client.post("http://localhost:11434/api/chat")
+            .json(&serde_json::json!({ 
+                "model": model, 
+                "messages": messages, 
+                "stream": false,
+                "options": {
+                    "temperature": 0.1,  // High Accuracy
+                    "num_ctx": 16384     // Massive memory context window
+                }
+            })).send().await.map_err(|e| format!("Network Error: ({})", e))?;
+        
         if !res.status().is_success() { return Err(format!("Ollama Error: {}", res.text().await.unwrap_or_default())); }
         let text = res.text().await.unwrap();
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) { if let Some(resp) = json.get("response").and_then(|v| v.as_str()) { return Ok(resp.to_string()); } }
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) { 
+            if let Some(resp) = json["message"]["content"].as_str() { return Ok(resp.to_string()); } 
+        }
         Ok(text)
     }
 }
