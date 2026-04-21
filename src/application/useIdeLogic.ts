@@ -91,23 +91,22 @@ export const useIdeLogic = () => {
       const workspaceContext = await getWorkspaceContext();
       const apiKey = selectedModel.provider === "openai" ? settings.openAiKey : settings.geminiKey;
       
-      // --- UPGRADED: STRICT SEPARATION OF CONCERNS & RESPONSIVE DESIGN ENFORCEMENT ---
       const systemPrompt = `You are a God-Tier Autonomous IDE Agent and Expert Senior UI/UX Developer. You have full memory of previous chats.
       DO NOT use markdown format (***) in your standard text explanations. Keep your chatting brief.
       
       CRITICAL DESIGN & CODING RULES:
       1. ABSOLUTELY NO BASIC DESIGNS. You must produce breathtaking, modern, premium tech-startup level UI.
-      2. RESPONSIVENESS IS MANDATORY. Your design must perfectly adapt to mobile, tablet, and desktop screens using modern CSS (Flexbox/Grid) or TailwindCSS.
-      3. STRICT SEPARATION OF CONCERNS: NEVER embed CSS inside <style> tags or JavaScript inside <script> blocks within HTML files. ALWAYS use external links (e.g., <link rel="stylesheet" href="styles.css"> and <script src="script.js"></script>) and create the corresponding separate files.
+      2. RESPONSIVENESS IS MANDATORY. You MUST heavily utilize TailwindCSS via CDN (<script src="https://cdn.tailwindcss.com"></script>), along with FontAwesome and modern typography.
+      3. ALWAYS write files directly to the root directory (e.g. index.html) unless the user explicitly asks for a folder structure. DO NOT force files into a 'src/' folder.
       
-      To WRITE files, use exactly this format (do not use XML):
-      ### FILE: path/filename.ext
+      To WRITE files, use exactly this format:
+      ### FILE: filename.ext
       \`\`\`html
       // Code goes here
       \`\`\`
       
       To DELETE files:
-      ### DELETE: path/filename.ext
+      ### DELETE: filename.ext
       
       To RUN TERMINAL COMMANDS:
       ### CMD: npm install axios`;
@@ -124,12 +123,15 @@ export const useIdeLogic = () => {
       const result = await generateAIResponse(selectedModel.provider, selectedModel.id, messageHistory, apiKey);
       let displayMessage = result; let actionCount = 0;
 
+      // 1. Commands
       const cmdRegex = /###\s*CMD:\s*([^\n]+)/g; let cmdMatch;
       while ((cmdMatch = cmdRegex.exec(result)) !== null) { handleTerminalCommand(cmdMatch[1].trim()); displayMessage = displayMessage.replace(cmdMatch[0], ""); actionCount++; }
 
+      // 2. Deletes
       const deleteRegex = /###\s*DELETE:\s*([^\n]+)/g; let delMatch;
       while ((delMatch = deleteRegex.exec(result)) !== null) { await deleteProjectFile(`${currentDir}/${delMatch[1].trim()}`, false).catch(()=>null); displayMessage = displayMessage.replace(delMatch[0], ""); actionCount++; }
 
+      // 3. Explicit Files (### FILE: filename \n ```language \n code ```)
       const writeRegex = /###\s*FILE:\s*([^\n]+)\n```[a-zA-Z]*\n([\s\S]*?)```/gi; let writeMatch;
       while ((writeMatch = writeRegex.exec(result)) !== null) {
         const filePath = writeMatch[1].trim(); const fileContent = writeMatch[2].trim();
@@ -140,6 +142,7 @@ export const useIdeLogic = () => {
         displayMessage = displayMessage.replace(writeMatch[0], `[Successfully saved ${filePath}]`); actionCount++;
       }
 
+      // 4. Fallback Markdown Extractor
       const fallbackRegex = /```([a-zA-Z]*)\n([\s\S]*?)```/gi; let fallbackMatch;
       while ((fallbackMatch = fallbackRegex.exec(displayMessage)) !== null) {
         const lang = fallbackMatch[1].toLowerCase();
@@ -164,7 +167,27 @@ export const useIdeLogic = () => {
     catch (e: any) { addToast(`Failed to schedule: ${e}`, "error"); }
   };
 
-  const startLiveServer = async () => { try { await spawnLiveServer(currentDir, 3000); await openInBrowser("http://localhost:3000"); addToast("Live Server Started", "success"); } catch (e) { addToast("Failed to start server", "error"); } };
+  // --- FIXED: Context-Aware Live Server ---
+  const startLiveServer = async () => { 
+    try { 
+      await spawnLiveServer(currentDir, 3000); 
+      let targetUrl = "http://localhost:3000";
+      
+      // If the user has an HTML file open, instantly point the browser to that exact file!
+      if (activeFile && activeFile.name.endsWith(".html")) {
+        const cleanDir = currentDir.replace(/\\/g, "/");
+        const cleanPath = activeFile.path.replace(/\\/g, "/");
+        let relPath = cleanPath.replace(cleanDir, "");
+        if (!relPath.startsWith("/")) relPath = "/" + relPath;
+        targetUrl += relPath;
+      }
+      
+      await openInBrowser(targetUrl); 
+      addToast("Live Server Started", "success"); 
+    } catch (e) { 
+      addToast("Failed to start server", "error"); 
+    } 
+  };
   
   const stopLiveServer = async () => {
     try { const res = await killAllBackgroundProcesses(); addToast(res, "success"); } 
